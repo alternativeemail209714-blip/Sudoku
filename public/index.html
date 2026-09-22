@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="theme-color" content="#08080f" />
+    <title>Sudoku LIVE — Play with your TikTok audience</title>
+    <meta
+      name="description"
+      content="Interactive Sudoku for TikTok LIVE. Your audience solves the board straight from chat, fully automated."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- LOGIN / GO LIVE -->
+    <main id="login" class="login" aria-label="Go live">
+      <div class="login-card">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <span class="dot dot-cyan"></span>
+            <span class="dot dot-pink"></span>
+          </span>
+          <h1>Sudoku <span class="live-word">LIVE</span></h1>
+        </div>
+        <p class="tagline">
+          Your audience solves the board from chat. You just go live.
+        </p>
+
+        <form id="login-form" class="login-form" autocomplete="off">
+          <label for="username">TikTok username</label>
+          <div class="input-wrap">
+            <span class="at">@</span>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              inputmode="text"
+              placeholder="yourusername"
+              spellcheck="false"
+              autocapitalize="none"
+            />
+          </div>
+
+          <label for="difficulty">Difficulty</label>
+          <div class="seg" id="difficulty" role="radiogroup" aria-label="Difficulty">
+            <button type="button" class="seg-btn" data-diff="easy" role="radio">Easy</button>
+            <button type="button" class="seg-btn is-active" data-diff="medium" role="radio" aria-checked="true">Medium</button>
+            <button type="button" class="seg-btn" data-diff="hard" role="radio">Hard</button>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="go-live">
+            Connect &amp; Go Live
+          </button>
+          <button type="button" class="btn btn-ghost" id="try-demo">
+            Try Demo (no TikTok needed)
+          </button>
+        </form>
+
+        <p id="login-note" class="login-note" hidden></p>
+      </div>
+      <p class="footnote">
+        Runs 100% free. Real chat needs a free
+        <a href="https://www.eulerstream.com" target="_blank" rel="noopener">EulerStream</a>
+        API key set on the server.
+      </p>
+    </main>
+
+    <!-- GAME -->
+    <div id="game" class="game" hidden>
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="live-pill" id="status-pill">
+            <span class="live-dot"></span>
+            <span id="status-text">Connecting…</span>
+          </span>
+          <span class="host" id="host-name">@you</span>
+        </div>
+        <div class="topbar-right">
+          <div class="mini-stat">
+            <span class="mini-val" id="stat-remaining">81</span>
+            <span class="mini-label">left</span>
+          </div>
+          <div class="mini-stat">
+            <span class="mini-val" id="stat-players">0</span>
+            <span class="mini-label">players</span>
+          </div>
+          <button class="icon-btn" id="open-settings" aria-label="Settings">⚙</button>
+        </div>
+      </header>
+
+      <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+
+      <section class="board-wrap" aria-label="Sudoku board">
+        <div class="board" id="board"></div>
+      </section>
+
+      <div class="howto" id="howto">
+        <strong>Answer in chat:</strong>
+        <span class="howto-fmt">row&nbsp;col&nbsp;number</span>
+        <span class="howto-eg">e.g. type <b>3 5 7</b> for row 3, col 5 = 7 &nbsp;·&nbsp; also works: <b>R3C5 7</b></span>
+      </div>
+
+      <section class="leaderboard" aria-label="Leaderboard">
+        <div class="lb-head">
+          <h2>Top Solvers</h2>
+          <span class="lb-diff" id="lb-diff">Medium</span>
+        </div>
+        <ol class="lb-list" id="lb-list">
+          <li class="lb-empty">No solves yet — first correct answer takes the lead.</li>
+        </ol>
+      </section>
+
+      <div class="toast-layer" id="toast-layer" aria-live="polite"></div>
+
+      <!-- Win overlay -->
+      <div id="win" class="win" hidden>
+        <div class="win-card">
+          <div class="win-burst" aria-hidden="true"></div>
+          <h2>Puzzle Solved!</h2>
+          <div class="win-winner" id="win-winner"></div>
+          <p class="win-time" id="win-time"></p>
+          <ol class="lb-list win-lb" id="win-lb"></ol>
+          <button class="btn btn-primary" id="win-next">Next Puzzle</button>
+        </div>
+      </div>
+
+      <!-- Settings sheet -->
+      <div id="sheet" class="sheet" hidden>
+        <div class="sheet-panel">
+          <div class="sheet-grab"></div>
+          <h3>Host controls</h3>
+
+          <label class="sheet-label">Difficulty</label>
+          <div class="seg" id="sheet-diff" role="radiogroup">
+            <button type="button" class="seg-btn" data-diff="easy">Easy</button>
+            <button type="button" class="seg-btn is-active" data-diff="medium">Medium</button>
+            <button type="button" class="seg-btn" data-diff="hard">Hard</button>
+          </div>
+
+          <div id="demo-controls" hidden>
+            <label class="sheet-label">Demo speed</label>
+            <input type="range" id="demo-speed" min="500" max="3500" step="250" value="1800" />
+          </div>
+
+          <div class="sheet-actions">
+            <button class="btn btn-primary" id="btn-new">New Puzzle</button>
+            <button class="btn btn-ghost" id="btn-reset-scores">Reset Scores</button>
+            <button class="btn btn-danger" id="btn-end">End Session</button>
+          </div>
+          <button class="sheet-close" id="sheet-close">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

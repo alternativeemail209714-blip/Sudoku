@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: sudoku-live
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: EULERSTREAM_API_KEY
+        sync: false
