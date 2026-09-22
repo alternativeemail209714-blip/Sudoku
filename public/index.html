@@ -1,167 +1,105 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
-    />
-    <meta name="theme-color" content="#08080f" />
-    <title>Sudoku LIVE — Play with your TikTok audience</title>
-    <meta
-      name="description"
-      content="Interactive Sudoku for TikTok LIVE. Your audience solves the board straight from chat, fully automated."
-    />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/styles.css" />
-  </head>
-  <body>
-    <!-- LOGIN / GO LIVE -->
-    <main id="login" class="login" aria-label="Go live">
-      <div class="login-card">
-        <div class="brand">
-          <span class="brand-mark" aria-hidden="true">
-            <span class="dot dot-cyan"></span>
-            <span class="dot dot-pink"></span>
-          </span>
-          <h1>Sudoku <span class="live-word">LIVE</span></h1>
-        </div>
-        <p class="tagline">
-          Your audience solves the board from chat. You just go live.
-        </p>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>TikTok Sudoku LIVE</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app-shell">
 
-        <form id="login-form" class="login-form" autocomplete="off">
-          <label for="username">TikTok username</label>
-          <div class="input-wrap">
-            <span class="at">@</span>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              inputmode="text"
-              placeholder="yourusername"
-              spellcheck="false"
-              autocapitalize="none"
-            />
-          </div>
+  <header class="top-bar">
+    <h1>TikTok Sudoku <span class="accent">LIVE</span></h1>
+    <div class="mode-tabs">
+      <button class="mode-btn active" data-mode="offline">Offline</button>
+      <button class="mode-btn" data-mode="test">Test</button>
+      <button class="mode-btn" data-mode="live">Live</button>
+    </div>
+  </header>
 
-          <label for="difficulty">Difficulty</label>
-          <div class="seg" id="difficulty" role="radiogroup" aria-label="Difficulty">
-            <button type="button" class="seg-btn" data-diff="easy" role="radio">Easy</button>
-            <button type="button" class="seg-btn is-active" data-diff="medium" role="radio" aria-checked="true">Medium</button>
-            <button type="button" class="seg-btn" data-diff="hard" role="radio">Hard</button>
-          </div>
+  <section class="legend-box">
+    <strong>How To Play:</strong> Type your answer as <span class="mono">COORDINATE + NUMBER</span>.
+    Example: <span class="mono highlight">A5 7</span> puts a <b>7</b> in <b>Row A, Column 5</b>.
+    Rows are letters A-I (top to bottom). Columns are numbers 1-9 (left to right).
+  </section>
 
-          <button type="submit" class="btn btn-primary" id="go-live">
-            Connect &amp; Go Live
-          </button>
-          <button type="button" class="btn btn-ghost" id="try-demo">
-            Try Demo (no TikTok needed)
-          </button>
-        </form>
+  <section class="panel live-panel" data-panel="live" hidden>
+    <h2>Live Mode (TikTok LIVE)</h2>
+    <p class="hint">Requires a free Sign API Key from eulerstream.com. This step is mandatory - Live Mode will not connect without it.</p>
+    <div class="field-row">
+      <input id="tiktokUsername" type="text" placeholder="TikTok username (no @)" autocomplete="off">
+      <input id="signApiKey" type="password" placeholder="EulerStream Sign API Key" autocomplete="off">
+    </div>
+    <div class="field-row">
+      <button id="connectLiveBtn" class="btn btn-primary">Connect to TikTok LIVE</button>
+      <button id="disconnectLiveBtn" class="btn btn-danger">Disconnect</button>
+    </div>
+    <div id="liveStatus" class="status-line status-idle">Not connected.</div>
+  </section>
 
-        <p id="login-note" class="login-note" hidden></p>
+  <section class="panel test-panel" data-panel="test" hidden>
+    <h2>Test Mode</h2>
+    <p class="hint">No login needed. Use this to try the game before going live.</p>
+    <div class="field-row">
+      <button id="simulateBtn" class="btn btn-primary">Simulate Random Fake Chat</button>
+    </div>
+    <div class="field-row">
+      <input id="testCustomText" type="text" placeholder="Or type a fake comment, e.g. A5 7">
+      <button id="testCustomBtn" class="btn btn-secondary">Send As Fake Viewer</button>
+    </div>
+  </section>
+
+  <section class="panel offline-panel" data-panel="offline">
+    <h2>Offline Mode (Solo Play)</h2>
+    <p class="hint">Play the board yourself. Enter answers below.</p>
+    <div class="field-row">
+      <input id="offlineGuessInput" type="text" placeholder="Your guess, e.g. A5 7" autocomplete="off">
+      <button id="offlineGuessBtn" class="btn btn-primary">Submit</button>
+    </div>
+  </section>
+
+  <section class="board-and-side">
+    <div class="board-wrap">
+      <div class="puzzle-controls">
+        <select id="difficultySelect">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <button id="newPuzzleBtn" class="btn btn-secondary">New Puzzle</button>
+        <span id="solvedBanner" class="solved-banner" hidden>SOLVED! Great job, chat!</span>
       </div>
-      <p class="footnote">
-        Runs 100% free. Real chat needs a free
-        <a href="https://www.eulerstream.com" target="_blank" rel="noopener">EulerStream</a>
-        API key set on the server.
-      </p>
-    </main>
-
-    <!-- GAME -->
-    <div id="game" class="game" hidden>
-      <header class="topbar">
-        <div class="topbar-left">
-          <span class="live-pill" id="status-pill">
-            <span class="live-dot"></span>
-            <span id="status-text">Connecting…</span>
-          </span>
-          <span class="host" id="host-name">@you</span>
-        </div>
-        <div class="topbar-right">
-          <div class="mini-stat">
-            <span class="mini-val" id="stat-remaining">81</span>
-            <span class="mini-label">left</span>
-          </div>
-          <div class="mini-stat">
-            <span class="mini-val" id="stat-players">0</span>
-            <span class="mini-label">players</span>
-          </div>
-          <button class="icon-btn" id="open-settings" aria-label="Settings">⚙</button>
-        </div>
-      </header>
-
-      <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
-
-      <section class="board-wrap" aria-label="Sudoku board">
-        <div class="board" id="board"></div>
-      </section>
-
-      <div class="howto" id="howto">
-        <strong>Answer in chat:</strong>
-        <span class="howto-fmt">row&nbsp;col&nbsp;number</span>
-        <span class="howto-eg">e.g. type <b>3 5 7</b> for row 3, col 5 = 7 &nbsp;·&nbsp; also works: <b>R3C5 7</b></span>
-      </div>
-
-      <section class="leaderboard" aria-label="Leaderboard">
-        <div class="lb-head">
-          <h2>Top Solvers</h2>
-          <span class="lb-diff" id="lb-diff">Medium</span>
-        </div>
-        <ol class="lb-list" id="lb-list">
-          <li class="lb-empty">No solves yet — first correct answer takes the lead.</li>
-        </ol>
-      </section>
-
-      <div class="toast-layer" id="toast-layer" aria-live="polite"></div>
-
-      <!-- Win overlay -->
-      <div id="win" class="win" hidden>
-        <div class="win-card">
-          <div class="win-burst" aria-hidden="true"></div>
-          <h2>Puzzle Solved!</h2>
-          <div class="win-winner" id="win-winner"></div>
-          <p class="win-time" id="win-time"></p>
-          <ol class="lb-list win-lb" id="win-lb"></ol>
-          <button class="btn btn-primary" id="win-next">Next Puzzle</button>
-        </div>
-      </div>
-
-      <!-- Settings sheet -->
-      <div id="sheet" class="sheet" hidden>
-        <div class="sheet-panel">
-          <div class="sheet-grab"></div>
-          <h3>Host controls</h3>
-
-          <label class="sheet-label">Difficulty</label>
-          <div class="seg" id="sheet-diff" role="radiogroup">
-            <button type="button" class="seg-btn" data-diff="easy">Easy</button>
-            <button type="button" class="seg-btn is-active" data-diff="medium">Medium</button>
-            <button type="button" class="seg-btn" data-diff="hard">Hard</button>
-          </div>
-
-          <div id="demo-controls" hidden>
-            <label class="sheet-label">Demo speed</label>
-            <input type="range" id="demo-speed" min="500" max="3500" step="250" value="1800" />
-          </div>
-
-          <div class="sheet-actions">
-            <button class="btn btn-primary" id="btn-new">New Puzzle</button>
-            <button class="btn btn-ghost" id="btn-reset-scores">Reset Scores</button>
-            <button class="btn btn-danger" id="btn-end">End Session</button>
-          </div>
-          <button class="sheet-close" id="sheet-close">Close</button>
-        </div>
-      </div>
+      <div id="sudokuGrid" class="sudoku-grid"></div>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="/app.js"></script>
-  </body>
+    <aside class="side-panel">
+      <div class="diagnostics-box">
+        <h3>Diagnostics</h3>
+        <div>All Raw Events: <span id="rawEventCount">0</span></div>
+        <div>Last Received: <span id="lastReceived">(none yet)</span></div>
+      </div>
+
+      <div class="leaderboard-box">
+        <h3>Top 10 Leaderboard</h3>
+        <ol id="leaderboardList"></ol>
+      </div>
+
+      <div class="feed-box">
+        <h3>Recent Answers</h3>
+        <ul id="feedList"></ul>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="host-console-bar">
+    <input id="hostConsoleInput" type="text" placeholder="Host console: type a comment or override, e.g. A5 7" autocomplete="off">
+    <button id="hostConsoleBtn" class="btn btn-primary">Send</button>
+  </footer>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/game.js"></script>
+</body>
 </html>

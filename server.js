@@ -1,394 +1,458 @@
-import express from "express";
-import { createServer } from "http";
-import { Server } from "socket.io";
-import { fileURLToPath } from "url";
-import path from "path";
-import {
-  TikTokLiveConnection,
-  WebcastEvent,
-  ControlEvent,
-  SignConfig,
-} from "tiktok-live-connector";
-import { generatePuzzle, DIFFICULTIES } from "./lib/sudoku.js";
+// server.js - TikTok Sudoku LIVE (all-in-one deployment build)
+// This single file contains the whole backend: the Sudoku engine, the chat
+// message parser, the game state manager, the TikTok LIVE connector, and
+// the Express + Socket.IO server that ties it all together.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const path = require("path");
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 
-const PORT = process.env.PORT || 3000;
-const EULER_KEY =
-  process.env.EULERSTREAM_API_KEY || process.env.SIGN_API_KEY || "";
-if (EULER_KEY) SignConfig.apiKey = EULER_KEY;
+// ---------------------------------------------------------------------------
+// 0. CRASH PREVENTION - these two handlers make sure that one bad comment,
+//    one weird TikTok event, or any unexpected error NEVER takes the whole
+//    server down. We just log it and keep going.
+// ---------------------------------------------------------------------------
+process.on("uncaughtException", function (err) {
+  console.error("[uncaughtException - server kept running]", err);
+});
+process.on("unhandledRejection", function (err) {
+  console.error("[unhandledRejection - server kept running]", err);
+});
 
-const app = express();
-const server = createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+// ---------------------------------------------------------------------------
+// 1. SUDOKU ENGINE
+// ---------------------------------------------------------------------------
+function isValidPlacement(board, row, col, value) {
+  for (var i = 0; i < 9; i++) {
+    if (board[row][i] === value) return false;
+    if (board[i][col] === value) return false;
+  }
+  var boxRow = Math.floor(row / 3) * 3;
+  var boxCol = Math.floor(col / 3) * 3;
+  for (var r = 0; r < 3; r++) {
+    for (var c = 0; c < 3; c++) {
+      if (board[boxRow + r][boxCol + c] === value) return false;
+    }
+  }
+  return true;
+}
 
-app.use(express.static(path.join(__dirname, "public")));
-app.get("/healthz", (_req, res) => res.type("text").send("ok"));
+function shuffledDigits() {
+  var nums = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  for (var i = nums.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = nums[i]; nums[i] = nums[j]; nums[j] = tmp;
+  }
+  return nums;
+}
 
-// One session per host browser (the phone that is going live).
-const sessions = new Map();
+function generateSolvedBoard() {
+  var board = [];
+  for (var i = 0; i < 9; i++) board.push([0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  function fill(pos) {
+    if (pos === 81) return true;
+    var row = Math.floor(pos / 9);
+    var col = pos % 9;
+    var digits = shuffledDigits();
+    for (var i = 0; i < digits.length; i++) {
+      var value = digits[i];
+      if (isValidPlacement(board, row, col, value)) {
+        board[row][col] = value;
+        if (fill(pos + 1)) return true;
+        board[row][col] = 0;
+      }
+    }
+    return false;
+  }
+  fill(0);
+  return board;
+}
 
-// -- Comment parsing ---------------------------------------------------------
-// Accepts any of: "R3C5 7", "r3c5=7", "3 5 7", "3,5,7", "357".
+function generatePuzzle(difficulty) {
+  var solution = generateSolvedBoard();
+  var puzzle = solution.map(function (row) { return row.slice(); });
+  var clueCounts = { easy: 42, medium: 32, hard: 26 };
+  var clues = clueCounts[difficulty] || clueCounts.medium;
+  var cellsToRemove = 81 - clues;
+  var positions = [];
+  for (var i = 0; i < 81; i++) positions.push(i);
+  for (var j = positions.length - 1; j > 0; j--) {
+    var k = Math.floor(Math.random() * (j + 1));
+    var tmp = positions[j]; positions[j] = positions[k]; positions[k] = tmp;
+  }
+  var removed = 0;
+  for (var p = 0; p < positions.length && removed < cellsToRemove; p++) {
+    var row = Math.floor(positions[p] / 9);
+    var col = positions[p] % 9;
+    puzzle[row][col] = 0;
+    removed++;
+  }
+  return { puzzle: puzzle, solution: solution };
+}
+
+// ---------------------------------------------------------------------------
+// 2. CHAT PARSER - recognizes "A5 7" style algebraic-notation guesses.
+//    Also tolerant of "A5:7", "A5,7", "A5-7" and extra words around it.
+// ---------------------------------------------------------------------------
+var CELL_GUESS_REGEX = /\b([A-I])\s*[-:,]?\s*([1-9])[\s,:\-]+([1-9])\b/i;
+
 function parseGuess(text) {
-  if (!text) return null;
-  const t = text.toLowerCase().trim();
-
-  let m = t.match(/r\s*([1-9])\s*c\s*([1-9])\D*([1-9])/);
-  if (m) return { row: +m[1] - 1, col: +m[2] - 1, val: +m[3] };
-
-  m = t.match(/\b([1-9])\D+([1-9])\D+([1-9])\b/);
-  if (m) return { row: +m[1] - 1, col: +m[2] - 1, val: +m[3] };
-
-  m = t.match(/\b([1-9])([1-9])([1-9])\b/);
-  if (m) return { row: +m[1] - 1, col: +m[2] - 1, val: +m[3] };
-
-  return null;
+  if (!text || typeof text !== "string") return null;
+  var match = text.match(CELL_GUESS_REGEX);
+  if (!match) return null;
+  var rowLetter = match[1].toUpperCase();
+  var col = parseInt(match[2], 10);
+  var num = parseInt(match[3], 10);
+  var row = rowLetter.charCodeAt(0) - 65;
+  if (row < 0 || row > 8) return null;
+  if (col < 1 || col > 9) return null;
+  if (num < 1 || num > 9) return null;
+  return { row: row, col: col - 1, num: num, coordLabel: rowLetter + col };
 }
 
-// -- Game state --------------------------------------------------------------
-function createGame(socket, difficulty) {
-  const g = generatePuzzle(difficulty);
-  return {
-    socket,
-    username: null,
-    connection: null,
-    demo: false,
-    demoTimer: null,
-    difficulty,
-    points: g.points,
-    puzzle: g.puzzle,
-    solution: g.solution,
-    given: g.given,
-    filled: g.puzzle.slice(),
-    solvedBy: new Array(81).fill(null),
-    scores: new Map(), // userId -> { name, displayId, avatar, points, solves }
-    startedAt: Date.now(),
+// ---------------------------------------------------------------------------
+// 3. GAME STATE
+// ---------------------------------------------------------------------------
+function coordLabel(row, col) {
+  return String.fromCharCode(65 + row) + (col + 1);
+}
+
+function createGameState() {
+  var state = {
+    mode: "offline",
+    puzzle: null,
+    solution: null,
+    board: null,
+    givenMask: null,
     solved: false,
+    scores: {},
+    rawEventCount: 0,
+    lastReceived: null
   };
-}
 
-function remainingCells(session) {
-  let n = 0;
-  for (let i = 0; i < 81; i++) if (session.filled[i] === 0) n++;
-  return n;
-}
-
-function leaderboard(session, top = 12) {
-  return [...session.scores.values()]
-    .sort((a, b) => b.points - a.points || b.solves - a.solves)
-    .slice(0, top);
-}
-
-function statsOf(session) {
-  const remaining = remainingCells(session);
-  return {
-    remaining,
-    filled: 81 - remaining,
-    total: 81,
-    players: session.scores.size,
-    difficulty: session.difficulty,
-  };
-}
-
-function fullState(session) {
-  return {
-    given: session.given,
-    filled: session.filled,
-    difficulty: session.difficulty,
-    points: session.points,
-    solved: session.solved,
-    stats: statsOf(session),
-    leaderboard: leaderboard(session),
-  };
-}
-
-function sendState(session) {
-  session.socket.emit("game:state", fullState(session));
-}
-
-// -- Applying a guess --------------------------------------------------------
-function applyGuess(session, guess, user) {
-  if (session.solved) return;
-  const { row, col, val } = guess;
-  if (row < 0 || row > 8 || col < 0 || col > 8 || val < 1 || val > 9) return;
-  const idx = row * 9 + col;
-  if (session.given[idx]) return; // locked clue
-  if (session.filled[idx] !== 0) return; // already solved
-
-  if (session.solution[idx] !== val) {
-    session.socket.emit("guess:wrong", {
-      name: user.name,
-      row: row + 1,
-      col: col + 1,
-      val,
+  function reset(difficulty) {
+    var built = generatePuzzle(difficulty || "medium");
+    state.puzzle = built.puzzle;
+    state.solution = built.solution;
+    state.board = built.puzzle.map(function (row) { return row.slice(); });
+    state.givenMask = built.puzzle.map(function (row) {
+      return row.map(function (v) { return v !== 0; });
     });
-    return;
+    state.solved = false;
+    state.scores = {};
+  }
+  reset("medium");
+
+  function ensurePlayer(uniqueId, displayName) {
+    if (!state.scores[uniqueId]) {
+      state.scores[uniqueId] = { name: displayName || uniqueId, correct: 0, wrong: 0, points: 0 };
+    } else if (displayName) {
+      state.scores[uniqueId].name = displayName;
+    }
   }
 
-  session.filled[idx] = val;
-  session.solvedBy[idx] = user.userId;
+  function checkSolved() {
+    for (var r = 0; r < 9; r++) {
+      for (var c = 0; c < 9; c++) {
+        if (state.board[r][c] !== state.solution[r][c]) return false;
+      }
+    }
+    return true;
+  }
 
-  let score = session.scores.get(user.userId);
-  if (!score) {
-    score = {
-      name: user.name,
-      displayId: user.displayId,
-      avatar: user.avatar,
-      points: 0,
-      solves: 0,
+  function applyGuess(row, col, num, uniqueId, displayName) {
+    if (state.givenMask[row][col]) {
+      return { status: "given", coord: coordLabel(row, col) };
+    }
+    if (state.board[row][col] === state.solution[row][col] && state.board[row][col] !== 0) {
+      return { status: "already-solved", coord: coordLabel(row, col) };
+    }
+    ensurePlayer(uniqueId, displayName);
+    var correct = state.solution[row][col] === num;
+    if (correct) {
+      state.board[row][col] = num;
+      state.scores[uniqueId].correct += 1;
+      state.scores[uniqueId].points += 10;
+      var solvedNow = checkSolved();
+      if (solvedNow) state.solved = true;
+      return { status: "correct", coord: coordLabel(row, col), num: num, solved: solvedNow };
+    }
+    state.scores[uniqueId].wrong += 1;
+    return { status: "wrong", coord: coordLabel(row, col), num: num };
+  }
+
+  function getLeaderboard(limit) {
+    var entries = Object.keys(state.scores).map(function (id) {
+      var s = state.scores[id];
+      return { uniqueId: id, name: s.name, correct: s.correct, wrong: s.wrong, points: s.points };
+    });
+    entries.sort(function (a, b) {
+      if (b.points !== a.points) return b.points - a.points;
+      return b.correct - a.correct;
+    });
+    return entries.slice(0, limit || 10);
+  }
+
+  function getPublicState() {
+    return {
+      mode: state.mode,
+      board: state.board,
+      givenMask: state.givenMask,
+      solved: state.solved,
+      rawEventCount: state.rawEventCount,
+      lastReceived: state.lastReceived,
+      leaderboard: getLeaderboard(10)
     };
-    session.scores.set(user.userId, score);
-  }
-  score.points += session.points;
-  score.solves += 1;
-  score.name = user.name;
-  if (user.avatar) score.avatar = user.avatar;
-
-  session.socket.emit("cell:filled", {
-    index: idx,
-    row: row + 1,
-    col: col + 1,
-    value: val,
-    points: session.points,
-    solver: { name: user.name, displayId: user.displayId, avatar: user.avatar },
-  });
-  session.socket.emit("leaderboard", leaderboard(session));
-  session.socket.emit("stats", statsOf(session));
-
-  if (remainingCells(session) === 0) {
-    session.solved = true;
-    stopDemo(session);
-    session.socket.emit("game:solved", {
-      winner: leaderboard(session)[0] || null,
-      leaderboard: leaderboard(session),
-      seconds: Math.round((Date.now() - session.startedAt) / 1000),
-    });
-  }
-}
-
-function handleComment(session, c) {
-  const guess = parseGuess(c.text);
-  if (!guess) return;
-  applyGuess(session, guess, c);
-}
-
-// -- TikTok LIVE connection --------------------------------------------------
-function friendlyError(err) {
-  const name = err?.constructor?.name || "";
-  const msg = String(err?.message || err || "");
-  if (name === "UserOfflineError" || /offline|not.*live/i.test(msg)) {
-    return "That account is not live right now. Start your TikTok LIVE, then reconnect.";
-  }
-  if (/sign|api key|euler|unauthor/i.test(msg)) {
-    return "Sign server rejected the request. Check the EulerStream API key on the server.";
-  }
-  return msg || "Could not connect to TikTok LIVE.";
-}
-
-async function connectTikTok(session, username) {
-  const socket = session.socket;
-  session.username = username;
-
-  if (!EULER_KEY) {
-    socket.emit("tiktok:status", {
-      status: "error",
-      username,
-      message:
-        "Server is missing the EULERSTREAM_API_KEY. Add it in Render, then reconnect. (Or use Demo mode.)",
-    });
-    return;
   }
 
-  socket.emit("tiktok:status", { status: "connecting", username });
-
-  let conn;
-  try {
-    conn = new TikTokLiveConnection(username, { signApiKey: EULER_KEY });
-  } catch (err) {
-    socket.emit("tiktok:status", {
-      status: "error",
-      username,
-      message: friendlyError(err),
-    });
-    return;
-  }
-  session.connection = conn;
-
-  conn.on(WebcastEvent.CHAT, (data) => {
-    handleComment(session, {
-      text: data?.content || "",
-      name: data?.user?.nickname || data?.user?.displayId || "viewer",
-      displayId: data?.user?.displayId || "",
-      userId: data?.user?.id || data?.user?.displayId || `anon-${Math.random()}`,
-      avatar: data?.user?.avatarThumb?.urlList?.[0] || "",
-    });
-  });
-
-  conn.on(ControlEvent.CONNECTED, () =>
-    socket.emit("tiktok:status", { status: "connected", username })
-  );
-  conn.on(ControlEvent.DISCONNECTED, () =>
-    socket.emit("tiktok:status", { status: "disconnected", username })
-  );
-  conn.on(WebcastEvent.STREAM_END, () =>
-    socket.emit("tiktok:status", { status: "ended", username })
-  );
-  conn.on(ControlEvent.ERROR, (err) =>
-    socket.emit("tiktok:status", {
-      status: "error",
-      username,
-      message: friendlyError(err),
-    })
-  );
-
-  try {
-    await conn.connect();
-  } catch (err) {
-    socket.emit("tiktok:status", {
-      status: "error",
-      username,
-      message: friendlyError(err),
-    });
-  }
-}
-
-// -- Demo mode ---------------------------------------------------------------
-const DEMO_VIEWERS = [
-  "puzzle_panda", "night_owl", "sudoku_sam", "quick_quinn", "mila.plays",
-  "the_real_deej", "grid_goblin", "aya_solves", "kev.exe", "luna_logic",
-  "brainy_bea", "tomtom_99", "zaraz", "9x9_ninja", "captain_clue",
-];
-
-function randomDemoUser() {
-  const id = DEMO_VIEWERS[Math.floor(Math.random() * DEMO_VIEWERS.length)];
   return {
-    name: id,
-    displayId: id,
-    userId: `demo-${id}`,
-    avatar: "",
+    state: state,
+    reset: reset,
+    applyGuess: applyGuess,
+    getLeaderboard: getLeaderboard,
+    getPublicState: getPublicState
   };
 }
 
-function startDemo(session, speed = 1800) {
-  stopDemo(session);
-  session.demo = true;
-  session.demoTimer = setInterval(() => {
-    if (session.solved) return stopDemo(session);
-    const empties = [];
-    for (let i = 0; i < 81; i++) if (session.filled[i] === 0) empties.push(i);
-    if (empties.length === 0) return;
-    const idx = empties[Math.floor(Math.random() * empties.length)];
-    const user = randomDemoUser();
-    // 25% of the time simulate a wrong answer for realism.
-    const wrong = Math.random() < 0.25;
-    const val = wrong
-      ? ((session.solution[idx] % 9) + 1)
-      : session.solution[idx];
-    handleComment(session, {
-      text: `${Math.floor(idx / 9) + 1} ${(idx % 9) + 1} ${val}`,
-      ...user,
+// ---------------------------------------------------------------------------
+// 4. TIKTOK LIVE CONNECTOR - loaded dynamically so this works whether the
+//    installed package ships as CommonJS or an ES module, and wrapped so a
+//    failure here only shows a friendly status message instead of crashing.
+// ---------------------------------------------------------------------------
+function createTikTokConnector(onChat, onStatus, onRawEvent) {
+  var TikTokLiveConnection = null;
+  var WebcastEvent = null;
+  var activeConnection = null;
+  var retryCount = 0;
+  var MAX_RETRIES = 3;
+
+  async function loadLibrary() {
+    if (TikTokLiveConnection) return;
+    var lib = await import("tiktok-live-connector");
+    var mod = lib && lib.default ? Object.assign({}, lib, lib.default) : lib;
+    TikTokLiveConnection = mod.TikTokLiveConnection || mod.WebcastPushConnection;
+    WebcastEvent = mod.WebcastEvent;
+    if (!TikTokLiveConnection) {
+      throw new Error("Could not find a connection class in the tiktok-live-connector package.");
+    }
+  }
+
+  function extractChatFields(data) {
+    if (!data) return null;
+    var text = null;
+    if (typeof data.comment === "string") text = data.comment;
+    else if (typeof data.text === "string") text = data.text;
+    else if (typeof data.message === "string") text = data.message;
+    else if (data.content && typeof data.content.text === "string") text = data.content.text;
+    if (text === null) return null;
+
+    var uniqueId = "unknown";
+    if (data.user && data.user.uniqueId) uniqueId = data.user.uniqueId;
+    else if (data.user && data.user.id) uniqueId = data.user.id;
+    else if (data.uniqueId) uniqueId = data.uniqueId;
+    else if (data.userId) uniqueId = data.userId;
+
+    var nickname = uniqueId;
+    if (data.user && data.user.nickname) nickname = data.user.nickname;
+    else if (data.user && data.user.displayName) nickname = data.user.displayName;
+    else if (data.nickname) nickname = data.nickname;
+
+    return { text: String(text), uniqueId: String(uniqueId), nickname: String(nickname) };
+  }
+
+  function wireEvents(connection) {
+    var chatEventName = (WebcastEvent && WebcastEvent.CHAT) || "chat";
+    connection.on(chatEventName, function (data) {
+      try {
+        console.log("[TikTok raw chat event]", JSON.stringify(data).slice(0, 500));
+        onRawEvent(data);
+        var extracted = extractChatFields(data);
+        if (extracted) onChat(extracted);
+      } catch (err) {
+        console.error("[chat handler error - swallowed, server kept running]", err);
+      }
     });
-  }, Math.max(400, speed));
-}
-
-function stopDemo(session) {
-  if (session?.demoTimer) {
-    clearInterval(session.demoTimer);
-    session.demoTimer = null;
+    connection.on("disconnected", function () {
+      try { onStatus("disconnected", "Disconnected from TikTok LIVE."); } catch (e) {}
+    });
+    connection.on("streamEnd", function () {
+      try { onStatus("disconnected", "The TikTok LIVE stream ended."); } catch (e) {}
+    });
+    connection.on("error", function (err) {
+      try { onStatus("error", "Runtime error: " + (err && err.message ? err.message : err)); } catch (e) {}
+    });
   }
-}
 
-function teardown(session) {
-  if (!session) return;
-  stopDemo(session);
-  if (session.connection) {
-    try {
-      session.connection.disconnect();
-    } catch {}
-    session.connection = null;
-  }
-}
-
-// -- Socket wiring -----------------------------------------------------------
-io.on("connection", (socket) => {
-  socket.emit("server:info", {
-    hasKey: Boolean(EULER_KEY),
-    difficulties: Object.fromEntries(
-      Object.entries(DIFFICULTIES).map(([k, v]) => [k, v.label])
-    ),
-  });
-
-  socket.on("host:start", ({ username, difficulty, demo } = {}) => {
-    teardown(sessions.get(socket.id));
-    const diff = DIFFICULTIES[difficulty] ? difficulty : "medium";
-    const session = createGame(socket, diff);
-    sessions.set(socket.id, session);
-
-    const clean = String(username || "").trim().replace(/^@+/, "");
-    sendState(session);
-
-    if (demo) {
-      session.demo = true;
-      socket.emit("tiktok:status", {
-        status: "demo",
-        username: clean || "demo",
-      });
-      startDemo(session);
+  async function connect(username, signApiKey) {
+    if (!signApiKey) {
+      onStatus("error", "Missing Sign API Key. Get a free one at eulerstream.com and paste it in above.");
       return;
     }
-    connectTikTok(session, clean);
-  });
-
-  socket.on("host:new", ({ difficulty } = {}) => {
-    const prev = sessions.get(socket.id);
-    if (!prev) return;
-    const diff = DIFFICULTIES[difficulty] ? difficulty : prev.difficulty;
-    const wasDemo = prev.demo;
-    const username = prev.username;
-    const scores = prev.scores; // keep the running leaderboard across puzzles
-    teardown(prev);
-
-    const session = createGame(socket, diff);
-    session.scores = scores;
-    session.username = username;
-    session.demo = wasDemo;
-    sessions.set(socket.id, session);
-    sendState(session);
-
-    if (wasDemo) {
-      startDemo(session);
-    } else if (prev.connection || username) {
-      // Re-attach to the same live using a fresh connection.
-      if (username) connectTikTok(session, username);
+    try {
+      onStatus("connecting", "Loading TikTok connector library...");
+      await loadLibrary();
+      onStatus("connecting", "Connecting to @" + username + " ...");
+      activeConnection = new TikTokLiveConnection(username, { signApiKey: signApiKey });
+      wireEvents(activeConnection);
+      var result = await activeConnection.connect();
+      retryCount = 0;
+      var roomId = result && result.roomId ? result.roomId : "";
+      onStatus("connected", "Connected! Room ID: " + roomId);
+    } catch (err) {
+      var message = err && err.message ? err.message : String(err);
+      onStatus("error", "Connection failed: " + message);
+      await retry(username, signApiKey);
     }
-  });
+  }
 
-  socket.on("host:resetScores", () => {
-    const session = sessions.get(socket.id);
-    if (!session) return;
-    session.scores = new Map();
-    socket.emit("leaderboard", []);
-    socket.emit("stats", statsOf(session));
-  });
+  async function retry(username, signApiKey) {
+    if (retryCount >= MAX_RETRIES) {
+      onStatus("error", "Gave up after " + MAX_RETRIES + " tries. Double-check the username and Sign API Key, then click Connect again.");
+      retryCount = 0;
+      return;
+    }
+    retryCount++;
+    var delayMs = 1500 * retryCount;
+    onStatus("retrying", "Retry " + retryCount + " of " + MAX_RETRIES + " in " + (delayMs / 1000) + "s...");
+    await new Promise(function (resolve) { setTimeout(resolve, delayMs); });
+    await connect(username, signApiKey);
+  }
 
-  socket.on("demo:speed", ({ speed } = {}) => {
-    const session = sessions.get(socket.id);
-    if (session?.demo) startDemo(session, Number(speed) || 1800);
-  });
+  function disconnect() {
+    try {
+      if (activeConnection) activeConnection.disconnect();
+    } catch (err) {
+      console.error("[disconnect error - swallowed]", err);
+    }
+    activeConnection = null;
+    onStatus("disconnected", "Disconnected.");
+  }
 
-  socket.on("host:stop", () => {
-    teardown(sessions.get(socket.id));
-    sessions.delete(socket.id);
-  });
+  return { connect: connect, disconnect: disconnect };
+}
 
-  socket.on("disconnect", () => {
-    teardown(sessions.get(socket.id));
-    sessions.delete(socket.id);
+// ---------------------------------------------------------------------------
+// 5. EXPRESS + SOCKET.IO SERVER
+// ---------------------------------------------------------------------------
+var app = express();
+app.use(express.static(path.join(__dirname, "public")));
+
+var httpServer = http.createServer(app);
+var io = new Server(httpServer);
+
+var game = createGameState();
+
+function broadcastState() {
+  io.emit("state", game.getPublicState());
+}
+
+// Wraps a handler so a thrown error is logged, never crashes the server.
+function safe(fn) {
+  return function () {
+    try {
+      fn.apply(null, arguments);
+    } catch (err) {
+      console.error("[handler error - swallowed, server kept running]", err);
+    }
+  };
+}
+
+function processComment(text, uniqueId, nickname, source) {
+  game.state.rawEventCount += 1;
+  game.state.lastReceived = { uniqueId: uniqueId, nickname: nickname, text: text, source: source, at: Date.now() };
+  io.emit("diagnostics", { rawEventCount: game.state.rawEventCount, lastReceived: game.state.lastReceived });
+
+  var parsed = parseGuess(text);
+  if (!parsed) {
+    io.emit("guessResult", { uniqueId: uniqueId, nickname: nickname, text: text, status: "unparsed" });
+    return;
+  }
+  var result = game.applyGuess(parsed.row, parsed.col, parsed.num, uniqueId, nickname);
+  io.emit("guessResult", {
+    uniqueId: uniqueId,
+    nickname: nickname,
+    text: text,
+    coord: parsed.coordLabel,
+    num: parsed.num,
+    status: result.status,
+    solved: result.solved
+  });
+  broadcastState();
+  if (result.status === "correct" && result.solved) {
+    io.emit("puzzleSolved", { leaderboard: game.getLeaderboard(10) });
+  }
+}
+
+var tiktok = createTikTokConnector(
+  function onChat(fields) {
+    processComment(fields.text, fields.uniqueId, fields.nickname, "tiktok-live");
+  },
+  function onStatus(state, message) {
+    io.emit("liveStatus", { state: state, message: message });
+  },
+  function onRawEvent() {
+    // raw events are already logged to the server console inside the connector
+  }
+);
+
+var FAKE_VIEWER_NAMES = ["SudokuFan", "LiveViewer", "ChatMaster", "PuzzlePro", "NightOwl", "QuickSolver"];
+
+io.on("connection", function (socket) {
+  console.log("[client connected]", socket.id);
+  socket.emit("state", game.getPublicState());
+  socket.emit("liveStatus", { state: "idle", message: "Not connected." });
+
+  socket.on("host:setMode", safe(function (payload) {
+    if (!payload || !payload.mode) return;
+    game.state.mode = payload.mode;
+    broadcastState();
+  }));
+
+  socket.on("host:connectLive", safe(function (payload) {
+    if (!payload) return;
+    tiktok.connect(String(payload.username || "").replace("@", ""), String(payload.signApiKey || ""));
+  }));
+
+  socket.on("host:disconnectLive", safe(function () {
+    tiktok.disconnect();
+  }));
+
+  socket.on("host:newPuzzle", safe(function (payload) {
+    var difficulty = payload && payload.difficulty ? payload.difficulty : "medium";
+    game.reset(difficulty);
+    broadcastState();
+  }));
+
+  socket.on("host:comment", safe(function (payload) {
+    if (!payload || !payload.text) return;
+    processComment(payload.text, "host", "Host (You)", "host-console");
+  }));
+
+  socket.on("offline:guess", safe(function (payload) {
+    if (!payload || !payload.text) return;
+    processComment(payload.text, "offline-player", "You", "offline");
+  }));
+
+  socket.on("test:simulate", safe(function (payload) {
+    var text = payload && payload.text ? payload.text : null;
+    var name = FAKE_VIEWER_NAMES[Math.floor(Math.random() * FAKE_VIEWER_NAMES.length)] + Math.floor(Math.random() * 999);
+    if (!text) {
+      var row = Math.floor(Math.random() * 9);
+      var col = Math.floor(Math.random() * 9);
+      var useRealAnswer = Math.random() < 0.4;
+      var num = useRealAnswer ? game.state.solution[row][col] : (Math.floor(Math.random() * 9) + 1);
+      text = String.fromCharCode(65 + row) + (col + 1) + " " + num;
+    }
+    processComment(text, "fake-" + name, name, "test-mode");
+  }));
+
+  socket.on("disconnect", function () {
+    console.log("[client disconnected]", socket.id);
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`[v0] Sudoku LIVE running on http://localhost:${PORT}`);
-  console.log(`[v0] EulerStream key ${EULER_KEY ? "detected" : "NOT set (demo mode only)"}`);
+var PORT = process.env.PORT || 3000;
+httpServer.listen(PORT, function () {
+  console.log("TikTok Sudoku LIVE server running on port " + PORT);
 });
