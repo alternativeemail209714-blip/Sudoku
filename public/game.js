@@ -10,6 +10,60 @@
   window.addEventListener("resize", setViewportHeight);
   setViewportHeight();
 
+  // ---- Full Screen toggle --------------------------------------------------
+  // Uses the standard Fullscreen API (with vendor-prefixed fallbacks for
+  // older Safari/IE/Edge). The board itself never stretches to fill the
+  // screen - it keeps its own square aspect ratio and just gets a slightly
+  // higher max size on big fullscreen displays (see style.css). If the
+  // browser doesn't support the Fullscreen API at all (some mobile browsers
+  // in an embedded webview), the button is hidden instead of doing nothing.
+  var fullscreenBtn = document.getElementById("fullscreenBtn");
+  var appShellEl = document.querySelector(".app-shell");
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+  }
+
+  function updateFullscreenBtn() {
+    if (!fullscreenBtn) return;
+    var active = isFullscreen();
+    fullscreenBtn.classList.toggle("active", active);
+    fullscreenBtn.innerHTML = active ? "&#10005;" : "&#9974;";
+    fullscreenBtn.title = active ? "Exit Full Screen" : "Full Screen";
+    fullscreenBtn.setAttribute("aria-label", active ? "Exit Full Screen" : "Full Screen");
+  }
+
+  function requestFullscreenOn(el) {
+    var request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (!request) return;
+    try { request.call(el); } catch (e) { /* ignore - some browsers require a fresh user gesture */ }
+  }
+
+  function exitFullscreenNow() {
+    var exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (!exit) return;
+    try { exit.call(document); } catch (e) { /* already out of fullscreen */ }
+  }
+
+  if (fullscreenBtn) {
+    var target = appShellEl || document.documentElement;
+    var fsSupported = !!(
+      target.requestFullscreen || target.webkitRequestFullscreen || target.msRequestFullscreen
+    );
+    if (!fsSupported) {
+      fullscreenBtn.hidden = true;
+    } else {
+      fullscreenBtn.addEventListener("click", function () {
+        if (isFullscreen()) exitFullscreenNow();
+        else requestFullscreenOn(target);
+      });
+      document.addEventListener("fullscreenchange", function () { updateFullscreenBtn(); setViewportHeight(); });
+      document.addEventListener("webkitfullscreenchange", function () { updateFullscreenBtn(); setViewportHeight(); });
+      document.addEventListener("msfullscreenchange", function () { updateFullscreenBtn(); setViewportHeight(); });
+      updateFullscreenBtn();
+    }
+  }
+
   var socket = io();
 
   // ---- DOM refs -----------------------------------------------------------

@@ -14,6 +14,13 @@ To run it on your own computer first (recommended before deploying):
   3. Run: npm start
   4. Open http://localhost:3000 in your browser.
 
+v1.3 changes:
+  - Full Screen button (top-right, next to the gear icon): puts the app in
+    true browser full screen - handy when the dashboard is displayed on a
+    TV, a second monitor, or captured in OBS for a stream. The board never
+    stretches to fill the screen; it keeps its own square proportions and
+    just gets a bit bigger and more readable on large displays.
+
 v1.2 changes:
   - Auto Next Round: a toggle in Settings that, when on, automatically starts
     a new puzzle (same difficulty) about 10 seconds after the current one is

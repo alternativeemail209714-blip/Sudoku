@@ -37,6 +37,7 @@ html, body {
   gap: 8px;
 }
 .top-bar h1 { font-size: 17px; margin: 0; }
+.top-bar-actions { display: flex; align-items: center; gap: 8px; }
 .accent { color: var(--pink); }
 .icon-btn {
   background: var(--bg-panel);
@@ -49,6 +50,7 @@ html, body {
   cursor: pointer;
   line-height: 1;
 }
+.icon-btn.active { background: var(--pink); border-color: var(--pink); color: #fff; }
 .quick-hint {
   text-align: center;
   font-size: 12.5px;
@@ -321,4 +323,41 @@ html, body {
 @media (min-width: 640px) {
   .settings-overlay { align-items: center; justify-content: center; }
   .settings-drawer { max-width: 480px; border-radius: 16px; max-height: 84vh; }
+}
+
+/* ---- Full Screen mode ----------------------------------------------
+   The browser's Fullscreen API just makes .app-shell fill the whole
+   screen - it does NOT stretch anything inside it. The board keeps its
+   own max-width + aspect-ratio (set above on .sudoku-grid) no matter how
+   wide or tall the screen is, so it always stays a perfect, centered
+   square. On large fullscreen displays (a TV or a wide monitor used for
+   streaming) we simply allow the board and its side panels to grow a bit
+   bigger - still capped, still square, never stretched. */
+.app-shell:fullscreen,
+.app-shell:-webkit-full-screen,
+.app-shell:-ms-fullscreen {
+  background: var(--bg);
+  justify-content: center;
+}
+.app-shell:fullscreen .board-stage,
+.app-shell:-webkit-full-screen .board-stage,
+.app-shell:-ms-fullscreen .board-stage {
+  justify-content: center;
+  flex: 1;
+}
+@media (min-width: 900px) {
+  .app-shell:fullscreen .puzzle-topline,
+  .app-shell:-webkit-full-screen .puzzle-topline,
+  .app-shell:fullscreen .sudoku-grid,
+  .app-shell:-webkit-full-screen .sudoku-grid,
+  .app-shell:fullscreen .details-panel,
+  .app-shell:-webkit-full-screen .details-panel,
+  .app-shell:fullscreen .auto-next-countdown,
+  .app-shell:-webkit-full-screen .auto-next-countdown {
+    max-width: 680px;
+  }
+  .app-shell:fullscreen .grid-cell,
+  .app-shell:-webkit-full-screen .grid-cell {
+    font-size: clamp(16px, 3vw, 30px);
+  }
 }
