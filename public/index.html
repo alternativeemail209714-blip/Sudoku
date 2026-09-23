@@ -10,22 +10,50 @@
 <div class="app-shell">
 
   <header class="top-bar">
-    <h1><span class="title-prefix">TikTok </span>Sudoku <span class="accent">LIVE</span></h1>
+    <h1>SUDOKU <span class="accent">Live</span></h1>
     <div class="top-bar-actions">
-      <select id="difficultySelectTop" class="top-bar-select" aria-label="Difficulty" title="Difficulty">
-        <option value="very-easy">Very Easy</option>
-        <option value="easy">Easy</option>
-        <option value="moderate" selected>Moderate</option>
-        <option value="hard">Hard</option>
-        <option value="very-hard">Very Hard</option>
-        <option value="extreme">Extreme</option>
-        <option value="extremely-hard">Extremely Hard</option>
-      </select>
+      <!-- Custom dropdown (not a native <select>) so the toolbar only ever
+           shows one small symbol for the current difficulty - a colored,
+           numbered badge that goes green -> red as the level rises. The
+           full name only appears in the menu once it's opened, so this
+           can never get cut off on a narrow phone. -->
+      <div class="toolbar-dropdown" id="difficultyDropdown">
+        <button type="button" id="difficultyDropdownBtn" class="icon-btn toolbar-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Difficulty: Moderate" title="Difficulty: Moderate">
+          <span id="difficultyDropdownIcon" class="diff-badge level-3">3</span>
+        </button>
+        <ul id="difficultyDropdownMenu" class="toolbar-dropdown-menu" role="listbox" aria-label="Difficulty" hidden>
+          <li role="option" data-value="very-easy" aria-selected="false"><span class="diff-badge level-1">1</span><span class="dd-label">Very Easy</span></li>
+          <li role="option" data-value="easy" aria-selected="false"><span class="diff-badge level-2">2</span><span class="dd-label">Easy</span></li>
+          <li role="option" data-value="moderate" aria-selected="true" class="dd-active"><span class="diff-badge level-3">3</span><span class="dd-label">Moderate</span></li>
+          <li role="option" data-value="hard" aria-selected="false"><span class="diff-badge level-4">4</span><span class="dd-label">Hard</span></li>
+          <li role="option" data-value="very-hard" aria-selected="false"><span class="diff-badge level-5">5</span><span class="dd-label">Very Hard</span></li>
+          <li role="option" data-value="extreme" aria-selected="false"><span class="diff-badge level-6">6</span><span class="dd-label">Extreme</span></li>
+          <li role="option" data-value="extremely-hard" aria-selected="false"><span class="diff-badge level-7">7</span><span class="dd-label">Extremely Hard</span></li>
+        </ul>
+      </div>
       <button id="newPuzzleTopBtn" class="icon-btn" aria-label="New Puzzle" title="New Puzzle">&#8635;</button>
       <button id="leaderboardTopBtn" class="icon-btn" aria-label="Leaderboard" title="Leaderboard">&#127942;</button>
       <button id="revealCellTopBtn" class="icon-btn" aria-label="Reveal 1 Cell" title="Reveal 1 Cell">1</button>
       <button id="revealBoxTopBtn" class="icon-btn" aria-label="Reveal 3x3 Box" title="Reveal 3&times;3 Box">9</button>
       <button id="revealBoardTopBtn" class="icon-btn icon-btn-danger" aria-label="Reveal Whole Board" title="Reveal Whole Board">&#9888;</button>
+      <!-- Same custom-dropdown mechanism as difficulty above: only a
+           circular two-tone color swatch shows in the toolbar; the full
+           theme name appears once the menu is opened. -->
+      <div class="toolbar-dropdown" id="themeDropdown">
+        <button type="button" id="themeDropdownBtn" class="icon-btn toolbar-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Theme: Dark" title="Theme: Dark">
+          <span id="themeDropdownIcon" class="theme-swatch swatch-dark"></span>
+        </button>
+        <ul id="themeDropdownMenu" class="toolbar-dropdown-menu" role="listbox" aria-label="Theme" hidden>
+          <li role="option" data-value="dark" aria-selected="true" class="dd-active"><span class="theme-swatch swatch-dark"></span><span class="dd-label">Dark</span></li>
+          <li role="option" data-value="light" aria-selected="false"><span class="theme-swatch swatch-light"></span><span class="dd-label">Light</span></li>
+          <li role="option" data-value="cream" aria-selected="false"><span class="theme-swatch swatch-cream"></span><span class="dd-label">Cream</span></li>
+          <li role="option" data-value="sky" aria-selected="false"><span class="theme-swatch swatch-sky"></span><span class="dd-label">Sky Blue</span></li>
+          <li role="option" data-value="meadow" aria-selected="false"><span class="theme-swatch swatch-meadow"></span><span class="dd-label">Meadow Green</span></li>
+          <li role="option" data-value="blossom" aria-selected="false"><span class="theme-swatch swatch-blossom"></span><span class="dd-label">Blossom Pink</span></li>
+          <li role="option" data-value="lavender" aria-selected="false"><span class="theme-swatch swatch-lavender"></span><span class="dd-label">Lavender Violet</span></li>
+          <li role="option" data-value="honey" aria-selected="false"><span class="theme-swatch swatch-honey"></span><span class="dd-label">Honey Gold</span></li>
+        </ul>
+      </div>
       <button id="fullscreenBtn" class="icon-btn" aria-label="Full Screen" title="Full Screen">&#9974;</button>
       <button id="settingsBtn" class="icon-btn" aria-label="Settings">&#9881;</button>
     </div>
@@ -134,10 +162,16 @@
       </div>
 
       <div class="theme-row">
-        <span class="theme-label">Theme (easier on the eyes)</span>
-        <div class="theme-buttons">
-          <button type="button" id="themeDarkBtn" class="theme-btn" data-theme-choice="dark">Dark</button>
-          <button type="button" id="themeLightBtn" class="theme-btn" data-theme-choice="light">Light</button>
+        <span class="theme-label">Theme (easy on the eyes)</span>
+        <div class="theme-grid">
+          <button type="button" class="theme-choice-btn" data-theme-choice="dark"><span class="theme-swatch swatch-dark"></span>Dark</button>
+          <button type="button" class="theme-choice-btn" data-theme-choice="light"><span class="theme-swatch swatch-light"></span>Light</button>
+          <button type="button" class="theme-choice-btn" data-theme-choice="cream"><span class="theme-swatch swatch-cream"></span>Cream</button>
+          <button type="button" class="theme-choice-btn" data-theme-choice="sky"><span class="theme-swatch swatch-sky"></span>Sky Blue</button>
+          <button type="button" class="theme-choice-btn" data-theme-choice="meadow"><span class="theme-swatch swatch-meadow"></span>Meadow Green</button>
+          <button type="button" class="theme-choice-btn" data-theme-choice="blossom"><span class="theme-swatch swatch-blossom"></span>Blossom Pink</button>
+          <button type="button" class="theme-choice-btn" data-theme-choice="lavender"><span class="theme-swatch swatch-lavender"></span>Lavender Violet</button>
+          <button type="button" class="theme-choice-btn" data-theme-choice="honey"><span class="theme-swatch swatch-honey"></span>Honey Gold</button>
         </div>
       </div>
 
@@ -248,6 +282,9 @@
         </select>
         <button id="newPuzzleBtn" class="btn btn-secondary">New Puzzle</button>
       </div>
+
+      <button type="button" id="saveSettingsBtn" class="btn btn-primary save-settings-btn">&#128190; Save &amp; Apply Settings</button>
+      <div id="saveSettingsConfirm" class="save-settings-confirm" hidden>&#10003; Settings saved &amp; applied</div>
 
       <div class="legend-box-full">
         <strong>How To Play:</strong> Type your answer as COORDINATE + NUMBER, e.g.

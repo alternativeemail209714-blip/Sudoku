@@ -65,6 +65,110 @@
   --legend-bg: rgba(15, 138, 126, 0.08);
 }
 
+/* ---- Extra color themes -------------------------------------------------
+   Each is a light, easy-on-the-eyes palette in its own hue family. Text,
+   dimmed text and the two accent colors are all kept dark/saturated enough
+   for solid contrast against their backgrounds so every letter, number and
+   button stays comfortably legible - the same standard the Light theme
+   above was checked against. Picked from Settings or the top-bar theme
+   dropdown; the choice is remembered on this device. */
+:root[data-theme="cream"] {
+  --bg: #faf3e4;
+  --bg-panel: #ffffff;
+  --bg-input: #f1e6cf;
+  --pink: #c1512b;
+  --cyan: #8a5518;
+  --text: #2a2012;
+  --text-dim: #6b5c42;
+  --given: #ece0c5;
+  --correct: #1f7a4f;
+  --success: #16803d;
+  --danger: #d33a3a;
+  --warning: #b45309;
+  --border: #e3d6b8;
+  --legend-bg: rgba(138, 85, 24, 0.10);
+}
+:root[data-theme="sky"] {
+  --bg: #eef6fc;
+  --bg-panel: #ffffff;
+  --bg-input: #dcedf7;
+  --pink: #c23e63;
+  --cyan: #1670a3;
+  --text: #142433;
+  --text-dim: #4d6478;
+  --given: #d7e8f2;
+  --correct: #1f7a4f;
+  --success: #16803d;
+  --danger: #d33a3a;
+  --warning: #b45309;
+  --border: #cfe1ee;
+  --legend-bg: rgba(22, 112, 163, 0.10);
+}
+:root[data-theme="meadow"] {
+  --bg: #eef7ee;
+  --bg-panel: #ffffff;
+  --bg-input: #dcefdc;
+  --pink: #b6483f;
+  --cyan: #2f7d4f;
+  --text: #16261a;
+  --text-dim: #4b5f4f;
+  --given: #dcebd7;
+  --correct: #1f7a4f;
+  --success: #16803d;
+  --danger: #c1342b;
+  --warning: #b45309;
+  --border: #cfe3cf;
+  --legend-bg: rgba(47, 125, 79, 0.10);
+}
+:root[data-theme="blossom"] {
+  --bg: #fdf1f5;
+  --bg-panel: #ffffff;
+  --bg-input: #fbe1ea;
+  --pink: #c23368;
+  --cyan: #8a4a6b;
+  --text: #34202a;
+  --text-dim: #7a5568;
+  --given: #f6dbe6;
+  --correct: #1f7a4f;
+  --success: #16803d;
+  --danger: #d33a3a;
+  --warning: #b45309;
+  --border: #f0cfdd;
+  --legend-bg: rgba(138, 74, 107, 0.10);
+}
+:root[data-theme="lavender"] {
+  --bg: #f4f1fb;
+  --bg-panel: #ffffff;
+  --bg-input: #e7e0f7;
+  --pink: #a1396f;
+  --cyan: #5b3ea6;
+  --text: #241c33;
+  --text-dim: #5c5271;
+  --given: #e3dbf5;
+  --correct: #1f7a4f;
+  --success: #16803d;
+  --danger: #d33a3a;
+  --warning: #b45309;
+  --border: #ddd3f0;
+  --legend-bg: rgba(91, 62, 166, 0.10);
+}
+:root[data-theme="honey"] {
+  --bg: #fdf6e6;
+  --bg-panel: #ffffff;
+  --bg-input: #f7e8c4;
+  --pink: #b23b2e;
+  --cyan: #9c6b0a;
+  --text: #2e2210;
+  --text-dim: #6e5a30;
+  --given: #f2e2b6;
+  --correct: #1f7a4f;
+  --success: #16803d;
+  --danger: #c1342b;
+  --warning: #b45309;
+  --border: #ecd9a0;
+  --legend-bg: rgba(156, 107, 10, 0.10);
+}
+
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
@@ -128,17 +232,93 @@ html, body {
 .icon-btn.active { background: var(--pink); border-color: var(--pink); color: #fff; }
 .icon-btn-danger { color: var(--danger); border-color: var(--danger); }
 .icon-btn-danger:hover { background: var(--danger); color: #2b0b0b; }
-.top-bar-select {
-  height: 34px;
-  padding: 0 6px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+/* ---- Top toolbar custom dropdowns (difficulty / theme) -----------------
+   Not native <select> elements: a compact icon-sized trigger button shows
+   only a single symbol for the current choice (a colored, numbered badge
+   for difficulty; a two-tone color swatch for theme), so it can never get
+   cut off on a narrow phone. The full list of names only appears in the
+   floating menu once the trigger is tapped. */
+.toolbar-dropdown { position: relative; flex: 0 0 auto; }
+.toolbar-dropdown-trigger { display: flex; align-items: center; justify-content: center; padding: 0; }
+.toolbar-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  min-width: 176px;
+  max-height: 60vh;
+  overflow-y: auto;
   background: var(--bg-panel);
-  color: var(--text);
-  font-size: 11.5px;
-  max-width: 92px;
-  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.28);
 }
+.toolbar-dropdown-menu[hidden] { display: none; }
+.toolbar-dropdown-menu li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+.toolbar-dropdown-menu li:hover { background: var(--bg-input); }
+.toolbar-dropdown-menu li.dd-active { background: var(--legend-bg); font-weight: 700; }
+.toolbar-dropdown-menu .dd-label { flex: 1; white-space: nowrap; }
+
+/* Difficulty symbol: a small colored, numbered badge. Color runs green to
+   red as the level rises, so the level reads at a glance even at icon
+   size, with the number giving an unambiguous 1-7 scale. */
+.diff-badge {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+}
+.diff-badge.level-1 { background: #16a34a; }
+.diff-badge.level-2 { background: #65a30d; }
+.diff-badge.level-3 { background: #ca8a04; }
+.diff-badge.level-4 { background: #ea580c; }
+.diff-badge.level-5 { background: #dc2626; }
+.diff-badge.level-6 { background: #b91c1c; }
+.diff-badge.level-7 { background: #7f1d1d; }
+.toolbar-dropdown-trigger .diff-badge { width: 18px; height: 18px; font-size: 10px; }
+
+/* Theme symbol: a two-tone circular swatch built from that theme's own
+   background and accent colors, so each theme is recognizable on sight. */
+.theme-swatch {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+.toolbar-dropdown-trigger .theme-swatch { width: 18px; height: 18px; }
+.swatch-dark     { background: linear-gradient(135deg, #161a23 50%, #ec5f74 50%); }
+.swatch-light    { background: linear-gradient(135deg, #f4f5f9 50%, #d63a56 50%); }
+.swatch-cream    { background: linear-gradient(135deg, #faf3e4 50%, #c1512b 50%); }
+.swatch-sky      { background: linear-gradient(135deg, #eef6fc 50%, #1670a3 50%); }
+.swatch-meadow   { background: linear-gradient(135deg, #eef7ee 50%, #2f7d4f 50%); }
+.swatch-blossom  { background: linear-gradient(135deg, #fdf1f5 50%, #c23368 50%); }
+.swatch-lavender { background: linear-gradient(135deg, #f4f1fb 50%, #5b3ea6 50%); }
+.swatch-honey    { background: linear-gradient(135deg, #fdf6e6 50%, #9c6b0a 50%); }
+
+@media (max-width: 480px) {
+  .toolbar-dropdown-menu { min-width: 156px; font-size: 12px; }
+}
+
 .quick-hint {
   text-align: center;
   font-size: 12.5px;
@@ -157,15 +337,12 @@ html, body {
   .top-bar h1 { font-size: 14px; }
   .top-bar-actions { gap: 4px; }
   .icon-btn { width: 28px; height: 28px; font-size: 13px; border-radius: 7px; }
-  .top-bar-select { height: 28px; max-width: 70px; font-size: 10.5px; padding: 0 4px; }
 }
 @media (max-width: 380px) {
-  .title-prefix { display: none; }
   .top-bar h1 { font-size: 13.5px; }
   .top-bar { padding: 8px 8px; gap: 5px; }
   .top-bar-actions { gap: 3px; }
   .icon-btn { width: 26px; height: 26px; font-size: 12px; }
-  .top-bar-select { max-width: 56px; font-size: 9.5px; }
 }
 .mono { font-family: "Courier New", monospace; }
 .highlight { color: var(--cyan); font-weight: bold; }
@@ -408,11 +585,12 @@ html, body {
 .settings-header h2 { margin: 0; font-size: 16px; }
 .settings-divider { height: 1px; background: var(--border); margin: 14px 0; }
 
-/* ---- Theme picker ------------------------------------------------------ */
+/* ---- Theme picker (Settings drawer) -------------------------------------
+   A grid of theme cards, each with its own color swatch, so all 8 themes
+   are easy to compare and pick from without crowding a single row. */
 .theme-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -420,18 +598,48 @@ html, body {
   padding: 10px 12px;
   margin-bottom: 12px;
 }
-.theme-label { font-size: 13.5px; }
-.theme-buttons { display: flex; gap: 6px; }
-.theme-btn {
+.theme-label { font-size: 13.5px; font-weight: 600; }
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.theme-choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: var(--bg-input);
-  color: var(--text-dim);
+  color: var(--text);
   border: 1px solid var(--border);
-  padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: 10px;
+  padding: 8px 10px;
   cursor: pointer;
   font-size: 12.5px;
+  text-align: left;
 }
-.theme-btn.active { background: var(--cyan); color: #06201f; border-color: var(--cyan); font-weight: 700; }
+.theme-choice-btn .theme-swatch { width: 22px; height: 22px; }
+.theme-choice-btn.active {
+  border-color: var(--pink);
+  background: var(--legend-bg);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--pink);
+}
+@media (max-width: 380px) {
+  .theme-grid { grid-template-columns: 1fr; }
+}
+
+/* ---- Save & Apply Settings button ---------------------------------------
+   Every field in this drawer already saves as soon as it changes; this
+   button is the explicit, reassuring "commit everything now" action -
+   it flushes any field still focused and confirms with a short message. */
+.save-settings-btn { width: 100%; margin-bottom: 4px; }
+.save-settings-confirm {
+  text-align: center;
+  color: var(--success);
+  font-size: 12.5px;
+  font-weight: 700;
+  margin: 0 0 12px 0;
+}
 
 .auto-next-toggle {
   display: flex;

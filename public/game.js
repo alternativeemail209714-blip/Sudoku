@@ -10,41 +10,133 @@
   window.addEventListener("resize", setViewportHeight);
   setViewportHeight();
 
-  // ---- Theme (Dark / Light) -------------------------------------------
-  // Defaults to the viewer's OS/browser preference; an explicit choice
-  // here is remembered on this device (localStorage) and always wins.
+  // ---- Theme (Dark / Light / Cream / Sky Blue / Meadow Green /
+  //      Blossom Pink / Lavender Violet / Honey Gold) --------------------
+  // Defaults to the viewer's OS/browser preference (dark or light only);
+  // an explicit choice of any of the 8 themes is remembered on this device
+  // (localStorage) and always wins from then on. Picking a theme is
+  // available both from Settings (a grid of cards) and from the compact
+  // dropdown in the top toolbar - both stay in sync.
   var THEME_STORAGE_KEY = "sudokuLiveTheme";
-  var themeButtons = document.querySelectorAll(".theme-btn");
+  var THEME_META = {
+    dark:     { label: "Dark" },
+    light:    { label: "Light" },
+    cream:    { label: "Cream" },
+    sky:      { label: "Sky Blue" },
+    meadow:   { label: "Meadow Green" },
+    blossom:  { label: "Blossom Pink" },
+    lavender: { label: "Lavender Violet" },
+    honey:    { label: "Honey Gold" }
+  };
+  var themeChoiceButtons = document.querySelectorAll(".theme-choice-btn");
+  var themeDropdownIcon = document.getElementById("themeDropdownIcon");
+  var themeDropdownBtn = document.getElementById("themeDropdownBtn");
+  var themeDropdownMenu = document.getElementById("themeDropdownMenu");
+
+  function updateThemeUI(key) {
+    themeChoiceButtons.forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-theme-choice") === key);
+    });
+    if (themeDropdownMenu) {
+      themeDropdownMenu.querySelectorAll("li").forEach(function (li) {
+        var active = li.getAttribute("data-value") === key;
+        li.classList.toggle("dd-active", active);
+        li.setAttribute("aria-selected", active ? "true" : "false");
+      });
+    }
+    if (themeDropdownIcon) themeDropdownIcon.className = "theme-swatch swatch-" + key;
+    var label = THEME_META[key] ? THEME_META[key].label : key;
+    if (themeDropdownBtn) {
+      themeDropdownBtn.title = "Theme: " + label;
+      themeDropdownBtn.setAttribute("aria-label", "Theme: " + label);
+    }
+  }
 
   function applyTheme(theme) {
-    if (theme === "light" || theme === "dark") {
+    if (THEME_META[theme]) {
       document.documentElement.setAttribute("data-theme", theme);
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
-    themeButtons.forEach(function (btn) {
-      btn.classList.toggle("active", btn.getAttribute("data-theme-choice") === theme);
-    });
+    updateThemeUI(theme);
   }
-  themeButtons.forEach(function (btn) {
+
+  function getEffectiveThemeKey() {
+    var attr = document.documentElement.getAttribute("data-theme");
+    if (attr && THEME_META[attr]) return attr;
+    var prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+    return prefersLight ? "light" : "dark";
+  }
+
+  function selectTheme(choice) {
+    if (!THEME_META[choice]) return;
+    applyTheme(choice);
+    try { localStorage.setItem(THEME_STORAGE_KEY, choice); } catch (e) { /* storage unavailable - ignore */ }
+  }
+  themeChoiceButtons.forEach(function (btn) {
     btn.addEventListener("click", function () {
-      var choice = btn.getAttribute("data-theme-choice");
-      applyTheme(choice);
-      try { localStorage.setItem(THEME_STORAGE_KEY, choice); } catch (e) { /* storage unavailable - ignore */ }
+      selectTheme(btn.getAttribute("data-theme-choice"));
     });
   });
   (function initTheme() {
     var saved = null;
     try { saved = localStorage.getItem(THEME_STORAGE_KEY); } catch (e) { /* ignore */ }
-    if (saved === "light" || saved === "dark") {
+    if (saved && THEME_META[saved]) {
       applyTheme(saved);
     } else {
-      var prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
-      themeButtons.forEach(function (btn) {
-        btn.classList.toggle("active", btn.getAttribute("data-theme-choice") === (prefersLight ? "light" : "dark"));
-      });
+      // No explicit choice saved yet - follow the OS/browser preference,
+      // and just reflect that in the UI without persisting it, so it can
+      // keep following system changes until the viewer picks explicitly.
+      updateThemeUI(getEffectiveThemeKey());
     }
   })();
+
+  // ---- Top-toolbar custom dropdowns (generic open/close machinery) -------
+  // Shared by the difficulty dropdown and the theme dropdown: only one can
+  // be open at a time, both close on an outside click, on Escape, or after
+  // an option is picked.
+  var openToolbarDropdowns = [];
+  function closeAllToolbarDropdowns() {
+    openToolbarDropdowns.forEach(function (d) { d.close(); });
+  }
+  function setupToolbarDropdown(rootId, btnId, menuId, onSelect) {
+    var root = document.getElementById(rootId);
+    var btn = document.getElementById(btnId);
+    var menu = document.getElementById(menuId);
+    if (!root || !btn || !menu) return null;
+    function close() {
+      menu.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    }
+    function open() {
+      closeAllToolbarDropdowns();
+      menu.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+    }
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (menu.hidden) open(); else close();
+    });
+    menu.querySelectorAll('li[role="option"]').forEach(function (li) {
+      li.addEventListener("click", function () {
+        close();
+        onSelect(li.getAttribute("data-value"));
+      });
+    });
+    var entry = { close: close, root: root };
+    openToolbarDropdowns.push(entry);
+    return entry;
+  }
+  document.addEventListener("click", function (e) {
+    openToolbarDropdowns.forEach(function (d) {
+      if (!d.root.contains(e.target)) d.close();
+    });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeAllToolbarDropdowns();
+  });
+
+  setupToolbarDropdown("themeDropdown", "themeDropdownBtn", "themeDropdownMenu", selectTheme);
 
   // ---- Host console collapse/expand ----------------------------------
   // Lets the host hide the bottom console (input + Send) to reclaim
@@ -769,28 +861,52 @@
   });
 
   // ---- Difficulty select sync (settings drawer <-> top toolbar) -----------
+  var DIFFICULTY_META = {
+    "very-easy":      { level: 1, label: "Very Easy" },
+    "easy":           { level: 2, label: "Easy" },
+    "moderate":       { level: 3, label: "Moderate" },
+    "hard":           { level: 4, label: "Hard" },
+    "very-hard":      { level: 5, label: "Very Hard" },
+    "extreme":        { level: 6, label: "Extreme" },
+    "extremely-hard": { level: 7, label: "Extremely Hard" }
+  };
   var difficultySelectEl = document.getElementById("difficultySelect");
-  var difficultySelectTopEl = document.getElementById("difficultySelectTop");
+  var difficultyDropdownIcon = document.getElementById("difficultyDropdownIcon");
+  var difficultyDropdownBtn = document.getElementById("difficultyDropdownBtn");
+  var difficultyDropdownMenu = document.getElementById("difficultyDropdownMenu");
+  var currentDifficulty = "moderate";
+
   function syncDifficultySelects(value) {
-    if (!value) return;
+    if (!value || !DIFFICULTY_META[value]) return;
+    currentDifficulty = value;
     if (difficultySelectEl && difficultySelectEl.value !== value) difficultySelectEl.value = value;
-    if (difficultySelectTopEl && difficultySelectTopEl.value !== value) difficultySelectTopEl.value = value;
+    var meta = DIFFICULTY_META[value];
+    if (difficultyDropdownIcon) {
+      difficultyDropdownIcon.className = "diff-badge level-" + meta.level;
+      difficultyDropdownIcon.textContent = meta.level;
+    }
+    if (difficultyDropdownBtn) {
+      difficultyDropdownBtn.title = "Difficulty: " + meta.label;
+      difficultyDropdownBtn.setAttribute("aria-label", "Difficulty: " + meta.label);
+    }
+    if (difficultyDropdownMenu) {
+      difficultyDropdownMenu.querySelectorAll("li").forEach(function (li) {
+        var active = li.getAttribute("data-value") === value;
+        li.classList.toggle("dd-active", active);
+        li.setAttribute("aria-selected", active ? "true" : "false");
+      });
+    }
   }
   if (difficultySelectEl) {
     difficultySelectEl.addEventListener("change", function () {
       syncDifficultySelects(difficultySelectEl.value);
     });
   }
-  if (difficultySelectTopEl) {
-    difficultySelectTopEl.addEventListener("change", function () {
-      syncDifficultySelects(difficultySelectTopEl.value);
-    });
-  }
+  setupToolbarDropdown("difficultyDropdown", "difficultyDropdownBtn", "difficultyDropdownMenu", syncDifficultySelects);
 
   // ---- New puzzle controls (settings drawer button + top toolbar button) --
   function triggerNewPuzzle() {
-    var difficulty = (difficultySelectTopEl || difficultySelectEl).value;
-    socket.emit("host:newPuzzle", { difficulty: difficulty });
+    socket.emit("host:newPuzzle", { difficulty: currentDifficulty });
     solvedBannerEl.hidden = true;
     clearAutoNextCountdown();
     hideRoundEndOverlay();
@@ -896,5 +1012,33 @@
   botAutoSolveToggleEl.addEventListener("change", function () {
     socket.emit("host:setBotAutoSolve", { enabled: botAutoSolveToggleEl.checked });
   });
+
+  // ---- Save & Apply Settings button ----------------------------------------
+  // Every individual field in this drawer already saves itself as soon as
+  // it changes (theme, timing, difficulty, toggles) - this button is the
+  // explicit "I'm done, commit everything now" action the host can tap for
+  // confidence. It flushes any field that's still focused (so its change
+  // event fires even if the host clicks straight from typing), re-persists
+  // everything currently in memory, and shows a short confirmation.
+  var saveSettingsBtnEl = document.getElementById("saveSettingsBtn");
+  var saveSettingsConfirmEl = document.getElementById("saveSettingsConfirm");
+  var saveSettingsConfirmTimer = null;
+  if (saveSettingsBtnEl) {
+    saveSettingsBtnEl.addEventListener("click", function () {
+      if (document.activeElement && document.activeElement !== document.body && typeof document.activeElement.blur === "function") {
+        document.activeElement.blur();
+      }
+      saveTimingPrefs(timingPrefs);
+      try { localStorage.setItem(THEME_STORAGE_KEY, getEffectiveThemeKey()); } catch (e) { /* ignore */ }
+      try { localStorage.setItem(HOST_CONSOLE_STORAGE_KEY, hostConsoleBar.classList.contains("collapsed") ? "1" : "0"); } catch (e) { /* ignore */ }
+      if (saveSettingsConfirmEl) {
+        saveSettingsConfirmEl.hidden = false;
+        if (saveSettingsConfirmTimer) clearTimeout(saveSettingsConfirmTimer);
+        saveSettingsConfirmTimer = setTimeout(function () {
+          saveSettingsConfirmEl.hidden = true;
+        }, 2500);
+      }
+    });
+  }
 
 })();

@@ -1,5 +1,31 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v2.0 changes:
+  - Top toolbar's Difficulty control is no longer a text dropdown that
+    could get cut off on narrow phones - it's now a small icon button
+    showing a colored, numbered badge (1 = Very Easy, green, through
+    7 = Extremely Hard, dark red). Tap it to open a floating menu listing
+    every difficulty by name; only the badge shows in the toolbar itself,
+    so it can never overflow or get clipped again.
+  - Game title in the top toolbar shortened to "SUDOKU Live" so there's
+    more room for the toolbar's buttons on small screens.
+  - 6 new color themes: Cream, Sky Blue, Meadow Green, Blossom Pink,
+    Lavender Violet and Honey Gold, alongside the existing Dark and
+    Light - 8 themes in total. Every color (background, panels, text,
+    both accent colors, grid cells, buttons, warnings, etc.) is themed,
+    and each palette was chosen for solid text/background contrast so
+    every letter, number and label stays easy to read. Pick a theme from
+    the grid of swatches in Settings, or from a new matching dropdown in
+    the top toolbar (next to Full Screen) - same "just a symbol" style as
+    the difficulty dropdown: a small two-tone color circle in the
+    toolbar, full theme names in the menu. Your choice is remembered on
+    this device.
+  - Settings now has a "Save & Apply Settings" button at the bottom of
+    the drawer. Every field already saved itself as soon as it changed,
+    but this gives an explicit, reassuring way to commit everything at
+    once (it also flushes any field you were still typing in) and shows
+    a short "Settings saved & applied" confirmation.
+
 v1.9 changes:
   - Host Console now hides completely when collapsed - no strip left
     behind at the bottom of the screen. A small floating "Console"
