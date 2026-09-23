@@ -134,11 +134,11 @@ html, body {
 .details-panel {
   width: 100%;
   max-width: 520px;
-  display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 10px;
 }
+.details-panel:not([hidden]) { display: flex; }
 .diagnostics-box, .leaderboard-box, .feed-box {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -190,9 +190,9 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: 50;
-  display: flex;
   align-items: flex-end;
 }
+.settings-overlay:not([hidden]) { display: flex; }
 .settings-backdrop {
   position: absolute;
   inset: 0;

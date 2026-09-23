@@ -31,26 +31,37 @@
   var currentMode = "offline";
 
   // ---- Settings drawer open/close -----------------------------------------
+  // NOTE: we set element.style.display directly (an inline style) rather than
+  // only toggling the "hidden" attribute. Inline styles always win over any
+  // class in a stylesheet (short of !important), so this cannot be silently
+  // overridden by CSS again in the future - closing is now guaranteed to work.
   var settingsOverlay = document.getElementById("settingsOverlay");
-  document.getElementById("settingsBtn").addEventListener("click", function () {
+  function openSettings() {
     settingsOverlay.hidden = false;
-  });
-  document.getElementById("closeSettingsBtn").addEventListener("click", function () {
+    settingsOverlay.style.display = "flex";
+  }
+  function closeSettings() {
     settingsOverlay.hidden = true;
-  });
-  document.getElementById("settingsBackdrop").addEventListener("click", function () {
-    settingsOverlay.hidden = true;
-  });
+    settingsOverlay.style.display = "none";
+  }
+  document.getElementById("settingsBtn").addEventListener("click", openSettings);
+  document.getElementById("closeSettingsBtn").addEventListener("click", closeSettings);
+  document.getElementById("settingsBackdrop").addEventListener("click", closeSettings);
 
   // ---- Leaderboard / diagnostics collapse ----------------------------------
   var detailsToggle = document.getElementById("detailsToggle");
   var detailsPanel = document.getElementById("detailsPanel");
-  detailsToggle.addEventListener("click", function () {
-    var isHidden = detailsPanel.hidden;
-    detailsPanel.hidden = !isHidden;
-    detailsToggle.innerHTML = isHidden
+  var detailsOpen = false;
+  function setDetailsOpen(open) {
+    detailsOpen = open;
+    detailsPanel.hidden = !open;
+    detailsPanel.style.display = open ? "flex" : "none";
+    detailsToggle.innerHTML = open
       ? "&#9650; Hide Leaderboard &amp; Activity"
       : "&#9660; Leaderboard &amp; Activity";
+  }
+  detailsToggle.addEventListener("click", function () {
+    setDetailsOpen(!detailsOpen);
   });
 
   // ---- Mode switching -------------------------------------------------------
@@ -253,7 +264,7 @@
     var difficulty = document.getElementById("difficultySelect").value;
     socket.emit("host:newPuzzle", { difficulty: difficulty });
     solvedBannerEl.hidden = true;
-    settingsOverlay.hidden = true;
+    closeSettings();
   });
 
 })();

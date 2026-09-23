@@ -352,7 +352,18 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
 // 5. EXPRESS + SOCKET.IO SERVER
 // ---------------------------------------------------------------------------
 var app = express();
-app.use(express.static(path.join(__dirname, "public")));
+// Cache-Control headers below make sure that every time you redeploy, phones
+// and browsers always fetch the newest index.html/style.css/game.js instead
+// of silently reusing an old cached copy from a previous deploy.
+app.use(express.static(path.join(__dirname, "public"), {
+  etag: false,
+  lastModified: false,
+  setHeaders: function (res) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+}));
 
 var httpServer = http.createServer(app);
 var io = new Server(httpServer);
