@@ -8,6 +8,17 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 
+// Loads variables from a local ".env" file (EULERSTREAM_SIGN_API_KEY,
+// TIKTOK_USERNAME, PORT) into process.env when running on your own computer.
+// Wrapped in a try/catch so a missing/corrupt .env or a missing dotenv
+// package never crashes the server - Render's own dashboard variables don't
+// need this at all, since Render injects them directly into process.env.
+try {
+  require("dotenv").config();
+} catch (err) {
+  console.warn("[dotenv] Could not load .env file (this is fine on Render): " + (err && err.message ? err.message : err));
+}
+
 // ---------------------------------------------------------------------------
 // 0. CRASH PREVENTION - these two handlers make sure that one bad comment,
 //    one weird TikTok event, or any unexpected error NEVER takes the whole
@@ -430,9 +441,32 @@ function createGameState() {
 function createTikTokConnector(onChat, onStatus, onRawEvent) {
   var TikTokLiveConnection = null;
   var WebcastEvent = null;
+  var SignConfig = null;
   var activeConnection = null;
   var retryCount = 0;
-  var MAX_RETRIES = 3;
+  var MAX_INITIAL_RETRIES = 3;
+
+  // ---- Connection-health tracking -----------------------------------------
+  // The single biggest real-world failure mode of this kind of reverse-
+  // engineered WebSocket connection is a "zombie" connection: the socket
+  // never receives a clean close, so the library never fires 'disconnected'
+  // or 'error', and the host console keeps showing "Connected!" forever even
+  // though no viewer comment is getting through any more. The only reliable
+  // way to catch this is to track when ANY data last arrived (not just chat -
+  // the viewer-count/"roomUser" event alone pings in constantly on a healthy
+  // connection) and force a fresh reconnect if it's gone quiet for too long.
+  var desiredConnected = false; // true once the host asks to connect, until they explicitly disconnect
+  var lastUsername = null;
+  var lastSignApiKey = null;
+  var lastActivityAt = 0;
+  var reconnectTimer = null;
+  var watchdogTimer = null;
+  var reconnectAttempt = 0;
+
+  var WATCHDOG_CHECK_MS = 20000;    // how often we check for a stalled connection
+  var WATCHDOG_STALE_MS = 120000;   // no data AT ALL for this long while "connected" = assume it's dead
+  var RECONNECT_BASE_DELAY_MS = 3000;
+  var RECONNECT_MAX_DELAY_MS = 30000;
 
   async function loadLibrary() {
     if (TikTokLiveConnection) return;
@@ -440,6 +474,7 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
     var mod = lib && lib.default ? Object.assign({}, lib, lib.default) : lib;
     TikTokLiveConnection = mod.TikTokLiveConnection || mod.WebcastPushConnection;
     WebcastEvent = mod.WebcastEvent;
+    SignConfig = mod.SignConfig || null;
     if (!TikTokLiveConnection) {
       throw new Error("Could not find a connection class in the tiktok-live-connector package.");
     }
@@ -454,6 +489,11 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
     else if (data.content && typeof data.content.text === "string") text = data.content.text;
     if (text === null) return null;
 
+    // The exact shape of "who sent this" has changed across tiktok-live-
+    // connector releases (nested under `.user`, flattened onto the message
+    // itself, or both at once depending on version) so every known spot is
+    // tried, in order, before giving up and lumping the viewer in as
+    // "unknown" (their guess still counts, it just won't show a name).
     var uniqueId = "unknown";
     if (data.user && data.user.uniqueId) uniqueId = data.user.uniqueId;
     else if (data.user && data.user.id) uniqueId = data.user.id;
@@ -462,8 +502,10 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
 
     var nickname = uniqueId;
     if (data.user && data.user.nickname) nickname = data.user.nickname;
+    else if (data.user && data.user.nickName) nickname = data.user.nickName;
     else if (data.user && data.user.displayName) nickname = data.user.displayName;
     else if (data.nickname) nickname = data.nickname;
+    else if (data.nickName) nickname = data.nickName;
 
     // TikTok's live-connector library has shipped several different shapes
     // for the viewer's profile picture across versions, so we try each of
@@ -485,17 +527,24 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
         firstUrl(data.user.avatarThumbnail) ||
         firstUrl(data.user.avatarMedium) ||
         firstUrl(data.user.avatarLarger) ||
-        (typeof data.user.avatarUrl === "string" ? data.user.avatarUrl : null);
+        (typeof data.user.avatarUrl === "string" ? data.user.avatarUrl : null) ||
+        (typeof data.user.profilePictureUrl === "string" ? data.user.profilePictureUrl : null);
     }
     if (!avatarUrl && typeof data.avatarUrl === "string") avatarUrl = data.avatarUrl;
+    if (!avatarUrl && typeof data.profilePictureUrl === "string") avatarUrl = data.profilePictureUrl;
 
     return { text: String(text), uniqueId: String(uniqueId), nickname: String(nickname), avatarUrl: avatarUrl ? String(avatarUrl) : null };
+  }
+
+  function markActivity() {
+    lastActivityAt = Date.now();
   }
 
   function wireEvents(connection) {
     var chatEventName = (WebcastEvent && WebcastEvent.CHAT) || "chat";
     connection.on(chatEventName, function (data) {
       try {
+        markActivity();
         console.log("[TikTok raw chat event]", JSON.stringify(data).slice(0, 500));
         onRawEvent(data);
         var extracted = extractChatFields(data);
@@ -504,20 +553,103 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
         console.error("[chat handler error - swallowed, server kept running]", err);
       }
     });
-    connection.on("disconnected", function () {
-      try { onStatus("disconnected", "Disconnected from TikTok LIVE."); } catch (e) {}
+
+    // These don't need to be parsed - they only exist here so the watchdog
+    // below can tell a genuinely healthy-but-quiet chat (no one has typed a
+    // guess in a while, but viewer-count/like/join pings keep arriving)
+    // apart from a truly dead connection (nothing at all arrives, ever,
+    // because the underlying WebSocket died without a clean close event -
+    // a well-known failure mode of unofficial/reverse-engineered TikTok
+    // WebSocket libraries). Wrapped individually so an unknown/renamed event
+    // in a future library version can never throw or block the others.
+    ["roomUser", "member", "like", "social", "gift", "rawData", "decodedData", "websocketData"].forEach(function (name) {
+      try { connection.on(name, markActivity); } catch (e) {}
+    });
+
+    connection.on("disconnected", function (info) {
+      try {
+        var reasonSuffix = info && info.reason ? " (" + info.reason + ")" : "";
+        onStatus("disconnected", "Disconnected from TikTok LIVE." + reasonSuffix);
+      } catch (e) {}
+      scheduleReconnect("the connection was closed");
     });
     connection.on("streamEnd", function () {
-      try { onStatus("disconnected", "The TikTok LIVE stream ended."); } catch (e) {}
+      try { onStatus("disconnected", "The TikTok LIVE stream ended. Watching for it to start again..."); } catch (e) {}
+      scheduleReconnect("the stream ended");
     });
     connection.on("error", function (err) {
       try { onStatus("error", "Runtime error: " + (err && err.message ? err.message : err)); } catch (e) {}
+      scheduleReconnect("a runtime error");
     });
   }
 
-  async function connect(username, signApiKey) {
-    username = username || DEFAULT_TIKTOK_USERNAME;
-    signApiKey = signApiKey || DEFAULT_SIGN_API_KEY;
+  // ---- Watchdog: catches a "zombie" connection --------------------------
+  // If the status says "Connected!" but literally nothing has arrived from
+  // TikTok - not a chat message, not a viewer-count update, nothing - for
+  // more than WATCHDOG_STALE_MS, the underlying socket is almost certainly
+  // dead without ever having fired a 'disconnected' or 'error' event. This
+  // is exactly the situation described as "status shows connected but
+  // guesses stop working": the fix is to notice it ourselves and force a
+  // fresh reconnect instead of waiting forever for an event that will never
+  // come.
+  function stopWatchdog() {
+    if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+  }
+
+  function startWatchdog() {
+    stopWatchdog();
+    watchdogTimer = setInterval(function () {
+      if (!desiredConnected || !activeConnection) return;
+      var quietForMs = Date.now() - lastActivityAt;
+      if (quietForMs > WATCHDOG_STALE_MS) {
+        console.error("[TikTok watchdog] no data at all for " + Math.round(quietForMs / 1000) + "s while marked connected - forcing a reconnect");
+        try { onStatus("retrying", "Connection went quiet - reconnecting..."); } catch (e) {}
+        try { activeConnection.disconnect(); } catch (e) {}
+        activeConnection = null;
+        stopWatchdog();
+        scheduleReconnect("no data was arriving");
+      }
+    }, WATCHDOG_CHECK_MS);
+  }
+
+  // ---- Reconnect scheduling ------------------------------------------------
+  // Handles both "the connection dropped mid-stream" (watchdog/disconnected/
+  // error above) and "the streamer isn't live yet / the first connect
+  // attempt failed" (retry() below) with the same backing timer, so the game
+  // can recover on its own - the whole point of "fully automated" - without
+  // the host needing to notice and click Connect again.
+  function cancelReconnectTimer() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
+
+  function scheduleReconnect(reasonPhrase) {
+    if (!desiredConnected) return; // the host explicitly disconnected - stay off
+    cancelReconnectTimer();
+    reconnectAttempt++;
+    var delayMs = Math.min(RECONNECT_BASE_DELAY_MS * reconnectAttempt, RECONNECT_MAX_DELAY_MS);
+    try {
+      onStatus("retrying", "Lost connection (" + reasonPhrase + "). Reconnecting in " + Math.round(delayMs / 1000) + "s...");
+    } catch (e) {}
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      if (!desiredConnected) return;
+      connect(lastUsername, lastSignApiKey, true);
+    }, delayMs);
+  }
+
+  async function connect(username, signApiKey, isAutoReconnect) {
+    username = username || lastUsername || DEFAULT_TIKTOK_USERNAME;
+    signApiKey = signApiKey || lastSignApiKey || DEFAULT_SIGN_API_KEY;
+    lastUsername = username;
+    lastSignApiKey = signApiKey;
+    desiredConnected = true;
+    cancelReconnectTimer();
+    stopWatchdog();
+    if (activeConnection) {
+      try { activeConnection.disconnect(); } catch (e) {}
+      activeConnection = null;
+    }
+
     if (!signApiKey) {
       onStatus("error", "Missing Sign API Key. Get a free one at eulerstream.com and paste it in above, or set EULERSTREAM_SIGN_API_KEY in the environment.");
       return;
@@ -527,36 +659,52 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
       return;
     }
     try {
-      onStatus("connecting", "Loading TikTok connector library...");
+      onStatus("connecting", isAutoReconnect ? "Reconnecting to @" + username + " ..." : "Loading TikTok connector library...");
       await loadLibrary();
+      if (SignConfig) SignConfig.apiKey = signApiKey; // covers versions that only read the global config
       onStatus("connecting", "Connecting to @" + username + " ...");
-      activeConnection = new TikTokLiveConnection(username, { signApiKey: signApiKey });
-      wireEvents(activeConnection);
-      var result = await activeConnection.connect();
+      var connection = new TikTokLiveConnection(username, { signApiKey: signApiKey });
+      wireEvents(connection);
+      var result = await connection.connect();
+      activeConnection = connection;
       retryCount = 0;
+      reconnectAttempt = 0;
+      markActivity();
+      startWatchdog();
       var roomId = result && result.roomId ? result.roomId : "";
       onStatus("connected", "Connected! Room ID: " + roomId);
     } catch (err) {
       var message = err && err.message ? err.message : String(err);
       onStatus("error", "Connection failed: " + message);
-      await retry(username, signApiKey);
+      if (isAutoReconnect) {
+        scheduleReconnect("the reconnect attempt failed");
+      } else {
+        await retry(username, signApiKey);
+      }
     }
   }
 
   async function retry(username, signApiKey) {
-    if (retryCount >= MAX_RETRIES) {
-      onStatus("error", "Gave up after " + MAX_RETRIES + " tries. Double-check the username and Sign API Key, then click Connect again.");
+    if (retryCount >= MAX_INITIAL_RETRIES) {
+      onStatus("error", "Gave up after " + MAX_INITIAL_RETRIES + " quick tries. Still watching in the background - it will connect on its own once @" + username + " goes live, or double-check the username/Sign API Key and click Connect again.");
       retryCount = 0;
+      // Keep trying slowly forever in the background instead of giving up
+      // for good - this is what lets the show "just start" the moment the
+      // host goes live, with nobody needing to come back and click Connect.
+      scheduleReconnect("the streamer may not be live yet");
       return;
     }
     retryCount++;
     var delayMs = 1500 * retryCount;
-    onStatus("retrying", "Retry " + retryCount + " of " + MAX_RETRIES + " in " + (delayMs / 1000) + "s...");
+    onStatus("retrying", "Retry " + retryCount + " of " + MAX_INITIAL_RETRIES + " in " + (delayMs / 1000) + "s...");
     await new Promise(function (resolve) { setTimeout(resolve, delayMs); });
     await connect(username, signApiKey);
   }
 
   function disconnect() {
+    desiredConnected = false;
+    cancelReconnectTimer();
+    stopWatchdog();
     try {
       if (activeConnection) activeConnection.disconnect();
     } catch (err) {
@@ -573,6 +721,16 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
 // 5. EXPRESS + SOCKET.IO SERVER
 // ---------------------------------------------------------------------------
 var app = express();
+
+// A plain, unauthenticated health-check endpoint. Render's free tier spins
+// a web service down after a period of no incoming HTTP requests - pointing
+// a free external monitor (e.g. UptimeRobot, cron-job.org) at
+// "https://your-app.onrender.com/healthz" every 5-10 minutes while you're
+// live keeps the dyno awake and the TikTok connection alive between rounds.
+app.get("/healthz", function (req, res) {
+  res.json({ ok: true, uptimeSeconds: process.uptime() });
+});
+
 // Cache-Control headers below make sure that every time you redeploy, phones
 // and browsers always fetch the newest index.html/style.css/game.js instead
 // of silently reusing an old cached copy from a previous deploy.
@@ -860,4 +1018,16 @@ io.on("connection", function (socket) {
 var PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, function () {
   console.log("TikTok Sudoku LIVE server running on port " + PORT);
+
+  // If a username AND a Sign API Key are both configured via environment
+  // variables (.env locally, or Render's Environment tab), connect to TikTok
+  // LIVE automatically as soon as the server boots - including right after a
+  // Render free-tier spin-down - instead of waiting for the host to open the
+  // page and click Connect. The host can always disconnect/reconnect
+  // manually from Settings afterwards; this only covers the very first
+  // connection of a fresh process.
+  if (DEFAULT_TIKTOK_USERNAME && DEFAULT_SIGN_API_KEY) {
+    console.log("[startup] TIKTOK_USERNAME and EULERSTREAM_SIGN_API_KEY are both set - connecting automatically...");
+    tiktok.connect(DEFAULT_TIKTOK_USERNAME, DEFAULT_SIGN_API_KEY);
+  }
 });

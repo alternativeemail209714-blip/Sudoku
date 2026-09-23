@@ -1,5 +1,52 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v2.5 changes - "answers stopped registering" fix:
+  - Root cause #1: package.json pinned the TikTok connector to "^2.0.3",
+    a *range* rather than an exact version. Every fresh `npm install` (i.e.
+    every single Render redeploy) was silently pulling in whatever the
+    newest matching version happened to be that day - and that library has
+    changed the shape of its chat-message data more than once over the
+    last year. Your server could end up reading fields that a newer
+    version had renamed or moved, with no error at all - guesses just
+    silently stopped counting. Fixed by pinning the exact version ("2.4.4")
+    this code is tested against, and by widening the field-reading code to
+    check every shape the library has used across its recent versions, so
+    a future version bump is far less likely to break things again.
+  - Root cause #2: TikTok's own WebSocket connection can go quiet without
+    ever telling the server it disconnected (no "disconnected" or "error"
+    event fires) - a known limitation of this kind of unofficial/reverse-
+    engineered connection. The toolbar kept showing "Connected!" forever
+    even though nothing was coming through any more. Fixed with a
+    watchdog: if literally nothing at all has arrived from TikTok (not a
+    comment, not even a viewer-count update) for 2 minutes while marked
+    "connected", the server now assumes the connection is dead, tears it
+    down, and automatically reconnects on its own - no need to notice and
+    click Connect again.
+  - Related: the server now also automatically retries in the background,
+    with a gentle backoff, any time the TikTok connection drops for *any*
+    reason - the stream ending, a network hiccup, the initial connect
+    attempt failing because you weren't live yet, etc. - instead of giving
+    up after 3 tries and waiting for you to reconnect by hand.
+  - If both TIKTOK_USERNAME and EULERSTREAM_SIGN_API_KEY are set as
+    environment variables, the server now connects to TikTok LIVE
+    automatically the moment it boots (including right after a Render
+    free-tier spin-down), instead of waiting for someone to open the page
+    and click Connect.
+  - Fixed the local ".env" file never actually being read. The app never
+    loaded the "dotenv" package, so EULERSTREAM_SIGN_API_KEY and
+    TIKTOK_USERNAME in your local .env file were silently ignored when
+    running with `npm start` on your own computer (you'd have had to paste
+    the key into the website every time instead). This only affected local
+    runs - Render's own Environment tab variables were never affected by
+    this.
+  - Added a plain "/healthz" endpoint. Render's free tier spins your
+    service down after a period of no incoming web traffic, which kills
+    the TikTok connection along with it. Pointing a free external monitor
+    (e.g. UptimeRobot, cron-job.org) at
+    "https://your-app.onrender.com/healthz" every 5-10 minutes while
+    you're live keeps the service - and the TikTok connection - from going
+    to sleep mid-stream.
+
 v2.4 changes:
   - New "Save & Apply as Default" button in Settings, alongside the existing
     "Save & Apply Settings". It bundles Theme, Mode (Offline/Test/Live),
