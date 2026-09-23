@@ -54,22 +54,29 @@
   var hostConsoleBar = document.getElementById("hostConsoleBar");
   var hostConsoleRow = document.getElementById("hostConsoleRow");
   var hostConsoleToggle = document.getElementById("hostConsoleToggle");
+  var hostConsoleShowBtn = document.getElementById("hostConsoleShowBtn");
 
   function updateHostConsoleOffset() {
     if (!hostConsoleBar) return;
+    // offsetHeight is naturally 0 once the bar is display:none (collapsed),
+    // so the board reclaims that space automatically.
     document.documentElement.style.setProperty("--host-console-offset", hostConsoleBar.offsetHeight + "px");
   }
   function setHostConsoleCollapsed(collapsed) {
     hostConsoleBar.classList.toggle("collapsed", collapsed);
     hostConsoleRow.hidden = collapsed;
-    hostConsoleToggle.innerHTML = collapsed ? "&#9650; Show" : "&#9660; Hide";
-    hostConsoleToggle.setAttribute("aria-label", collapsed ? "Show host console" : "Hide host console");
+    if (hostConsoleShowBtn) hostConsoleShowBtn.hidden = !collapsed;
     try { localStorage.setItem(HOST_CONSOLE_STORAGE_KEY, collapsed ? "1" : "0"); } catch (e) { /* ignore */ }
     updateHostConsoleOffset();
   }
   hostConsoleToggle.addEventListener("click", function () {
-    setHostConsoleCollapsed(!hostConsoleBar.classList.contains("collapsed"));
+    setHostConsoleCollapsed(true);
   });
+  if (hostConsoleShowBtn) {
+    hostConsoleShowBtn.addEventListener("click", function () {
+      setHostConsoleCollapsed(false);
+    });
+  }
   window.addEventListener("resize", updateHostConsoleOffset);
   (function initHostConsoleCollapse() {
     var saved = null;

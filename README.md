@@ -1,5 +1,18 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v1.9 changes:
+  - Host Console now hides completely when collapsed - no strip left
+    behind at the bottom of the screen. A small floating "Console"
+    button appears in the bottom-right corner instead; tap it to bring
+    the input bar back. Remembered per device, same as before.
+  - Top toolbar (title + all 8 buttons/dropdown) now always stays on a
+    single row - in the normal view AND in Full Screen - including on
+    typical Android phone widths. Everything shrinks progressively as
+    the screen narrows (smaller icons, smaller difficulty dropdown,
+    "TikTok" trimmed from the title on the narrowest phones); on the
+    very narrowest devices the row scrolls sideways within itself
+    rather than ever wrapping to a second line.
+
 v1.8 changes:
   - Floating Window Timing (in Settings, below Auto Next Round): lets you
     customize exactly how long each floating window stays on screen -

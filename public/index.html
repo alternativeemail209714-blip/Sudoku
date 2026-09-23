@@ -10,7 +10,7 @@
 <div class="app-shell">
 
   <header class="top-bar">
-    <h1>TikTok Sudoku <span class="accent">LIVE</span></h1>
+    <h1><span class="title-prefix">TikTok </span>Sudoku <span class="accent">LIVE</span></h1>
     <div class="top-bar-actions">
       <select id="difficultySelectTop" class="top-bar-select" aria-label="Difficulty" title="Difficulty">
         <option value="very-easy">Very Easy</option>
@@ -76,6 +76,11 @@
       </div>
     </div>
   </main>
+
+  <!-- Small floating button that reappears when the Host Console is
+       hidden, so the console can be brought back without a full-width
+       bar sitting at the bottom of the screen the whole time. -->
+  <button id="hostConsoleShowBtn" class="host-console-show-btn" type="button" aria-label="Show host console" hidden>&#9000; Console</button>
 
   <footer class="host-console-bar" id="hostConsoleBar">
     <div class="host-console-head">
