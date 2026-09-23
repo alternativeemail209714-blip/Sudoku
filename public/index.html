@@ -12,6 +12,20 @@
   <header class="top-bar">
     <h1>TikTok Sudoku <span class="accent">LIVE</span></h1>
     <div class="top-bar-actions">
+      <select id="difficultySelectTop" class="top-bar-select" aria-label="Difficulty" title="Difficulty">
+        <option value="very-easy">Very Easy</option>
+        <option value="easy">Easy</option>
+        <option value="moderate" selected>Moderate</option>
+        <option value="hard">Hard</option>
+        <option value="very-hard">Very Hard</option>
+        <option value="extreme">Extreme</option>
+        <option value="extremely-hard">Extremely Hard</option>
+      </select>
+      <button id="newPuzzleTopBtn" class="icon-btn" aria-label="New Puzzle" title="New Puzzle">&#8635;</button>
+      <button id="leaderboardTopBtn" class="icon-btn" aria-label="Leaderboard" title="Leaderboard">&#127942;</button>
+      <button id="revealCellTopBtn" class="icon-btn" aria-label="Reveal 1 Cell" title="Reveal 1 Cell">1</button>
+      <button id="revealBoxTopBtn" class="icon-btn" aria-label="Reveal 3x3 Box" title="Reveal 3&times;3 Box">9</button>
+      <button id="revealBoardTopBtn" class="icon-btn icon-btn-danger" aria-label="Reveal Whole Board" title="Reveal Whole Board">&#9888;</button>
       <button id="fullscreenBtn" class="icon-btn" aria-label="Full Screen" title="Full Screen">&#9974;</button>
       <button id="settingsBtn" class="icon-btn" aria-label="Settings">&#9881;</button>
     </div>
@@ -112,7 +126,8 @@
 
       <section class="panel live-panel" data-panel="live" hidden>
         <h2>Live Mode (TikTok LIVE)</h2>
-        <p class="hint">Requires a free Sign API Key from eulerstream.com. Live Mode will not connect without it.</p>
+        <p class="hint" id="liveKeyHintDefault" hidden>A Sign API Key is already configured on the server - just enter your TikTok username below and hit Connect.</p>
+        <p class="hint" id="liveKeyHintManual">Requires a free Sign API Key from eulerstream.com. Live Mode will not connect without it.</p>
         <div class="field-row">
           <input id="tiktokUsername" type="text" placeholder="TikTok username (no @)" autocomplete="off">
           <input id="signApiKey" type="password" placeholder="EulerStream Sign API Key" autocomplete="off">

@@ -1,5 +1,26 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v1.7 changes:
+  - Live guess toast area now reserves a fixed slot of space at all times,
+    so the board no longer gets pushed up/down every time a toast appears
+    or disappears. Only one toast shows at a time - a new incoming guess
+    immediately replaces whatever is currently showing instead of stacking.
+  - Top toolbar (next to Full Screen and Settings) now also has: a
+    difficulty dropdown, a New Puzzle button, a Leaderboard button, and
+    one button each for Reveal 1 Cell / Reveal 3x3 Box / Reveal Whole
+    Board - all in addition to the same controls still living in
+    Settings (the two stay in sync).
+  - This Round's Top Scorers (shown when a puzzle is solved) now lists
+    every viewer who scored that round, no matter how many there are. The
+    All-Time Leaderboard (both in the round-end popup and in the
+    Leaderboard & Activity panel) shows roughly the top 20 at a glance and
+    scrolls to reveal everyone else who has ever scored.
+  - TikTok LIVE connecting no longer requires typing in the EulerStream
+    Sign API Key every time. Set EULERSTREAM_SIGN_API_KEY (and optionally
+    TIKTOK_USERNAME) as environment variables - see "TikTok LIVE Sign API
+    Key setup" below - and the Live Mode panel will skip asking for the
+    key, only asking for your TikTok username if one wasn't also set.
+
 v1.6 changes:
   - Hints & Reveals (in Settings): "Reveal 1 Cell" fills in one random
     unsolved cell, "Reveal 3x3 Box" fills in a whole box at once, and
@@ -51,6 +72,27 @@ To run it on your own computer first (recommended before deploying):
   2. Run: npm install
   3. Run: npm start
   4. Open http://localhost:3000 in your browser.
+
+## TikTok LIVE Sign API Key setup (so you don't retype it every time)
+
+Your EulerStream Sign API Key has already been filled in for you in the
+local ".env" file in this folder, so it works right away when you run the
+app on your own computer (npm start). It has NOT been written into any of
+the website's code, and ".env" is listed in .gitignore, so it will not be
+uploaded when you push this folder to GitHub - your key stays private.
+
+Because ".env" doesn't get pushed to GitHub, Render needs the same key set
+separately in its own dashboard:
+  1. On Render.com, open your Web Service.
+  2. Go to the "Environment" tab.
+  3. Add a variable named EULERSTREAM_SIGN_API_KEY with your key as the
+     value (the same one already in your local .env file).
+  4. (Optional) Add TIKTOK_USERNAME with your TikTok username if you
+     always stream from the same account, so it's pre-filled too.
+  5. Save - Render will redeploy automatically.
+
+Once that's set, the Live Mode panel in Settings will no longer ask for a
+Sign API Key at all - just enter your TikTok username and tap Connect.
 
 v1.4 changes:
   - Easier-on-the-eyes color palette: the neon pink/cyan and near-black

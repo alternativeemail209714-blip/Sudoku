@@ -21,6 +21,16 @@ process.on("unhandledRejection", function (err) {
 });
 
 // ---------------------------------------------------------------------------
+// 0b. TIKTOK LIVE DEFAULTS - read from environment variables (set in a local
+//     .env file for testing, and in Render's Environment tab for the live
+//     deployment) so the host does not have to paste the Sign API Key into
+//     the website every single time. The key itself is never sent to the
+//     browser - only whether a default is configured.
+// ---------------------------------------------------------------------------
+var DEFAULT_TIKTOK_USERNAME = String(process.env.TIKTOK_USERNAME || "").replace("@", "").trim();
+var DEFAULT_SIGN_API_KEY = String(process.env.EULERSTREAM_SIGN_API_KEY || "").trim();
+
+// ---------------------------------------------------------------------------
 // 1. SUDOKU ENGINE
 // ---------------------------------------------------------------------------
 function isValidPlacement(board, row, col, value) {
@@ -367,7 +377,10 @@ function createGameState() {
       if (b.points !== a.points) return b.points - a.points;
       return b.correct - a.correct;
     });
-    return entries.slice(0, limit || 10);
+    // No default cap - the round leaderboard shows every scorer, and the
+    // all-time leaderboard sends everyone too (the UI shows the top ~20 at
+    // a glance and scrolls for the rest). Pass an explicit limit to cap it.
+    return entries.slice(0, limit || Infinity);
   }
 
   function getLeaderboard(limit) {
@@ -386,8 +399,8 @@ function createGameState() {
       solved: state.solved,
       rawEventCount: state.rawEventCount,
       lastReceived: state.lastReceived,
-      leaderboard: getLeaderboard(10),
-      allTimeLeaderboard: getAllTimeLeaderboard(10),
+      leaderboard: getLeaderboard(),
+      allTimeLeaderboard: getAllTimeLeaderboard(),
       autoNextRound: state.autoNextRound,
       lastDifficulty: state.lastDifficulty,
       roundStartTime: state.roundStartTime,
@@ -503,8 +516,14 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
   }
 
   async function connect(username, signApiKey) {
+    username = username || DEFAULT_TIKTOK_USERNAME;
+    signApiKey = signApiKey || DEFAULT_SIGN_API_KEY;
     if (!signApiKey) {
-      onStatus("error", "Missing Sign API Key. Get a free one at eulerstream.com and paste it in above.");
+      onStatus("error", "Missing Sign API Key. Get a free one at eulerstream.com and paste it in above, or set EULERSTREAM_SIGN_API_KEY in the environment.");
+      return;
+    }
+    if (!username) {
+      onStatus("error", "Missing TikTok username.");
       return;
     }
     try {
@@ -666,8 +685,8 @@ function scheduleAutoNext() {
 function emitPuzzleSolvedIfNeeded(justSolved) {
   if (!justSolved) return;
   io.emit("puzzleSolved", {
-    leaderboard: game.getLeaderboard(10),
-    allTimeLeaderboard: game.getAllTimeLeaderboard(10),
+    leaderboard: game.getLeaderboard(),
+    allTimeLeaderboard: game.getAllTimeLeaderboard(),
     solveTimeMs: game.state.solveTimeMs
   });
   if (game.state.autoNextRound) scheduleAutoNext();
@@ -726,6 +745,13 @@ io.on("connection", function (socket) {
   initialState.botAutoSolveEnabled = botAutoSolveEnabled;
   socket.emit("state", initialState);
   socket.emit("liveStatus", { state: "idle", message: "Not connected." });
+  // Tell the client whether a Sign API Key / username are already
+  // configured on the server, so it can skip asking the host to type them
+  // in. The actual key value is never sent to the browser.
+  socket.emit("liveConfig", {
+    hasDefaultSignApiKey: !!DEFAULT_SIGN_API_KEY,
+    defaultUsername: DEFAULT_TIKTOK_USERNAME || ""
+  });
 
   socket.on("host:setMode", safe(function (payload) {
     if (!payload || !payload.mode) return;
@@ -734,8 +760,10 @@ io.on("connection", function (socket) {
   }));
 
   socket.on("host:connectLive", safe(function (payload) {
-    if (!payload) return;
-    tiktok.connect(String(payload.username || "").replace("@", ""), String(payload.signApiKey || ""));
+    payload = payload || {};
+    var username = String(payload.username || "").replace("@", "").trim() || DEFAULT_TIKTOK_USERNAME;
+    var signApiKey = String(payload.signApiKey || "").trim() || DEFAULT_SIGN_API_KEY;
+    tiktok.connect(username, signApiKey);
   }));
 
   socket.on("host:disconnectLive", safe(function () {

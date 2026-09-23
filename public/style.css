@@ -92,8 +92,8 @@ html, body {
   justify-content: space-between;
   gap: 8px;
 }
-.top-bar h1 { font-size: 17px; margin: 0; }
-.top-bar-actions { display: flex; align-items: center; gap: 8px; }
+.top-bar h1 { font-size: 17px; margin: 0; flex: 0 0 auto; }
+.top-bar-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .accent { color: var(--pink); }
 .icon-btn {
   background: var(--bg-panel);
@@ -103,10 +103,25 @@ html, body {
   width: 34px;
   height: 34px;
   font-size: 16px;
+  font-weight: 700;
   cursor: pointer;
   line-height: 1;
+  flex: 0 0 auto;
 }
 .icon-btn.active { background: var(--pink); border-color: var(--pink); color: #fff; }
+.icon-btn-danger { color: var(--danger); border-color: var(--danger); }
+.icon-btn-danger:hover { background: var(--danger); color: #2b0b0b; }
+.top-bar-select {
+  height: 34px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 11.5px;
+  max-width: 92px;
+  flex: 0 0 auto;
+}
 .quick-hint {
   text-align: center;
   font-size: 12.5px;
@@ -219,9 +234,18 @@ html, body {
   font-size: 13px;
 }
 .diagnostics-box h3, .leaderboard-box h3, .feed-box h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--cyan); }
+/* This round's leaderboard shows every scorer, however many there are. */
 #leaderboardList { margin: 0; padding-left: 0; list-style: none; }
 #leaderboardList li { margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
-#allTimeLeaderboardList { margin: 0; padding-left: 0; list-style: none; }
+/* All-time leaderboard: everyone who has ever scored is in the list, but
+   only about 20 rows are visible at once - scroll for the rest. */
+#allTimeLeaderboardList {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  max-height: 680px;
+  overflow-y: auto;
+}
 #allTimeLeaderboardList li { margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
 #feedList { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 #feedList li { padding: 3px 0; border-bottom: 1px solid var(--border); }
@@ -510,19 +534,25 @@ html, body {
 
 /* ---- Live guess toast area --------------------------------------------
    Sits in the gap between the "Chat format" hint and the status/timer
-   row. Each incoming guess (correct, wrong, already-answered, or wrong
-   format) appears here as a floating pill with the viewer's avatar, then
-   fades out on its own. Stacks a few at a time. */
+   row. This box has a fixed, reserved height at all times (whether or
+   not a toast is currently showing) so the board never gets pushed
+   up/down as toasts appear and disappear. Only one toast is shown at a
+   time - a new incoming guess immediately replaces whatever is current,
+   instead of stacking multiple pills. The toast itself is positioned
+   absolutely inside the reserved box so its enter/exit animation never
+   changes the box's height. */
 .live-guess-toast-area {
   width: 100%;
   max-width: 520px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 4px;
+  position: relative;
+  height: 40px;
   margin-bottom: 6px;
 }
 .guess-toast {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -573,6 +603,8 @@ html, body {
 .round-end-card {
   width: 100%;
   max-width: 360px;
+  max-height: 82vh;
+  overflow-y: auto;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -592,6 +624,9 @@ html, body {
 }
 .round-end-head h2 { margin: 0; font-size: 16px; color: var(--cyan); }
 .round-end-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+/* All-time slide of the round-end popup: show roughly the top 20 at a
+   glance, scroll within the list itself for the rest. */
+.round-end-list.capped-20 { max-height: 60vh; overflow-y: auto; }
 .round-end-list li {
   display: flex;
   align-items: center;

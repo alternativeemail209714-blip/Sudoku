@@ -377,11 +377,23 @@
 
   // ---- Live guess toast area (the gap between the chat-format hint and
   //      the status/timer row) - a floating pill per incoming guess. -----
+  // The area has a fixed, reserved height (see style.css) so the board
+  // never gets pushed up/down as toasts appear and disappear, and only one
+  // toast is ever shown at a time - a new one immediately replaces
+  // whatever is currently showing instead of stacking up.
   var liveGuessToastAreaEl = document.getElementById("liveGuessToastArea");
-  var MAX_TOASTS = 4;
   var TOAST_LIFETIME_MS = 4200;
+  var toastHideTimer = null;
+
+  function clearCurrentToast() {
+    if (toastHideTimer) { clearTimeout(toastHideTimer); toastHideTimer = null; }
+    while (liveGuessToastAreaEl.firstChild) {
+      liveGuessToastAreaEl.removeChild(liveGuessToastAreaEl.firstChild);
+    }
+  }
 
   function pushGuessToast(cls, avatarUrl, uniqueId, name, detailText, pointsText) {
+    clearCurrentToast();
     var toast = document.createElement("div");
     toast.className = "guess-toast " + cls;
     toast.appendChild(makeAvatarImg(avatarUrl, uniqueId, name));
@@ -400,10 +412,7 @@
       toast.appendChild(ptSpan);
     }
     liveGuessToastAreaEl.appendChild(toast);
-    while (liveGuessToastAreaEl.children.length > MAX_TOASTS) {
-      liveGuessToastAreaEl.removeChild(liveGuessToastAreaEl.firstChild);
-    }
-    setTimeout(function () {
+    toastHideTimer = setTimeout(function () {
       toast.classList.add("leaving");
       setTimeout(function () {
         if (toast.parentNode) toast.parentNode.removeChild(toast);
@@ -428,9 +437,10 @@
   }
   roundEndCloseBtn.addEventListener("click", hideRoundEndOverlay);
 
-  function renderRoundEndList(list) {
+  function renderRoundEndList(list, capped) {
     roundEndListEl.innerHTML = "";
-    var top = (list || []).slice(0, 5);
+    roundEndListEl.classList.toggle("capped-20", !!capped);
+    var top = list || [];
     if (!top.length) {
       var empty = document.createElement("li");
       empty.textContent = "No scorers yet.";
@@ -456,20 +466,22 @@
     });
   }
 
-  function showRoundEndOverlay(title, list) {
+  function showRoundEndOverlay(title, list, capped) {
     roundEndTitleEl.textContent = title;
-    renderRoundEndList(list);
+    renderRoundEndList(list, capped);
     roundEndOverlayEl.hidden = false;
   }
 
-  // Shows the round's top scorers first, then automatically swaps to the
-  // all-time top scorers a few seconds later, then auto-dismisses. The X
-  // button (or clicking outside via close) can dismiss it early any time.
+  // Shows the round's top scorers first (everyone who scored, however
+  // many that is), then automatically swaps to the all-time top scorers
+  // (shown ~20 at a time, scrollable for the rest) a few seconds later,
+  // then auto-dismisses. The X button (or clicking outside) can dismiss
+  // it early any time.
   function showRoundEndSequence(roundList, allTimeList) {
     clearRoundEndTimers();
-    showRoundEndOverlay("This Round's Top Scorers", roundList);
+    showRoundEndOverlay("This Round's Top Scorers", roundList, false);
     roundEndTimers.push(setTimeout(function () {
-      showRoundEndOverlay("All-Time Top Scorers", allTimeList);
+      showRoundEndOverlay("All-Time Top Scorers", allTimeList, true);
       roundEndTimers.push(setTimeout(function () {
         roundEndOverlayEl.hidden = true;
       }, 5000));
@@ -512,11 +524,30 @@
 
     autoNextToggleEl.checked = !!state.autoNextRound;
     if (botAutoSolveToggleEl) botAutoSolveToggleEl.checked = !!state.botAutoSolveEnabled;
-    if (state.lastDifficulty) {
-      var difficultySelectEl = document.getElementById("difficultySelect");
-      if (difficultySelectEl && difficultySelectEl.value !== state.lastDifficulty) {
-        difficultySelectEl.value = state.lastDifficulty;
-      }
+    syncDifficultySelects(state.lastDifficulty);
+  });
+
+  // ---- TikTok LIVE config - lets the host skip re-entering the Sign API
+  //      Key when one is already set on the server (see server.js / .env).
+  socket.on("liveConfig", function (cfg) {
+    cfg = cfg || {};
+    var signApiKeyInput = document.getElementById("signApiKey");
+    var usernameInput = document.getElementById("tiktokUsername");
+    var hintDefault = document.getElementById("liveKeyHintDefault");
+    var hintManual = document.getElementById("liveKeyHintManual");
+    if (cfg.hasDefaultSignApiKey) {
+      signApiKeyServerConfigured = true;
+      if (signApiKeyInput) signApiKeyInput.hidden = true;
+      if (hintDefault) hintDefault.hidden = false;
+      if (hintManual) hintManual.hidden = true;
+    } else {
+      signApiKeyServerConfigured = false;
+      if (signApiKeyInput) signApiKeyInput.hidden = false;
+      if (hintDefault) hintDefault.hidden = true;
+      if (hintManual) hintManual.hidden = false;
+    }
+    if (cfg.defaultUsername && usernameInput && !usernameInput.value) {
+      usernameInput.value = cfg.defaultUsername;
     }
   });
 
@@ -573,11 +604,19 @@
   });
 
   // ---- Live mode controls -------------------------------------------------
+  // signApiKeyServerConfigured is set by the "liveConfig" socket listener
+  // above: true when EULERSTREAM_SIGN_API_KEY is already set on the server,
+  // in which case the host only needs to supply their TikTok username.
+  var signApiKeyServerConfigured = false;
   document.getElementById("connectLiveBtn").addEventListener("click", function () {
     var username = document.getElementById("tiktokUsername").value.trim();
     var signApiKey = document.getElementById("signApiKey").value.trim();
-    if (!username || !signApiKey) {
-      alert("Please enter both your TikTok username and your EulerStream Sign API Key.");
+    if (!username) {
+      alert("Please enter your TikTok username.");
+      return;
+    }
+    if (!signApiKeyServerConfigured && !signApiKey) {
+      alert("Please enter your EulerStream Sign API Key.");
       return;
     }
     socket.emit("host:connectLive", { username: username, signApiKey: signApiKey });
@@ -630,27 +669,58 @@
     if (!autoNextToggleEl.checked) clearAutoNextCountdown();
   });
 
-  // ---- New puzzle controls ---------------------------------------------------
-  document.getElementById("newPuzzleBtn").addEventListener("click", function () {
-    var difficulty = document.getElementById("difficultySelect").value;
+  // ---- Difficulty select sync (settings drawer <-> top toolbar) -----------
+  var difficultySelectEl = document.getElementById("difficultySelect");
+  var difficultySelectTopEl = document.getElementById("difficultySelectTop");
+  function syncDifficultySelects(value) {
+    if (!value) return;
+    if (difficultySelectEl && difficultySelectEl.value !== value) difficultySelectEl.value = value;
+    if (difficultySelectTopEl && difficultySelectTopEl.value !== value) difficultySelectTopEl.value = value;
+  }
+  if (difficultySelectEl) {
+    difficultySelectEl.addEventListener("change", function () {
+      syncDifficultySelects(difficultySelectEl.value);
+    });
+  }
+  if (difficultySelectTopEl) {
+    difficultySelectTopEl.addEventListener("change", function () {
+      syncDifficultySelects(difficultySelectTopEl.value);
+    });
+  }
+
+  // ---- New puzzle controls (settings drawer button + top toolbar button) --
+  function triggerNewPuzzle() {
+    var difficulty = (difficultySelectTopEl || difficultySelectEl).value;
     socket.emit("host:newPuzzle", { difficulty: difficulty });
     solvedBannerEl.hidden = true;
     clearAutoNextCountdown();
     hideRoundEndOverlay();
     closeSettings();
-  });
+  }
+  document.getElementById("newPuzzleBtn").addEventListener("click", triggerNewPuzzle);
+  document.getElementById("newPuzzleTopBtn").addEventListener("click", triggerNewPuzzle);
 
-  // ---- Hints & Reveals ---------------------------------------------------
-  document.getElementById("revealCellBtn").addEventListener("click", function () {
-    socket.emit("host:revealCell");
-  });
-  document.getElementById("revealBoxBtn").addEventListener("click", function () {
-    socket.emit("host:revealBox");
-  });
-  document.getElementById("revealBoardBtn").addEventListener("click", function () {
+  // ---- Hints & Reveals (settings drawer buttons + top toolbar buttons) ----
+  function triggerRevealCell() { socket.emit("host:revealCell"); }
+  function triggerRevealBox() { socket.emit("host:revealBox"); }
+  function triggerRevealBoard() {
     if (window.confirm("Reveal the entire board? This instantly ends the round.")) {
       socket.emit("host:revealBoard");
     }
+  }
+  document.getElementById("revealCellBtn").addEventListener("click", triggerRevealCell);
+  document.getElementById("revealBoxBtn").addEventListener("click", triggerRevealBox);
+  document.getElementById("revealBoardBtn").addEventListener("click", triggerRevealBoard);
+  document.getElementById("revealCellTopBtn").addEventListener("click", triggerRevealCell);
+  document.getElementById("revealBoxTopBtn").addEventListener("click", triggerRevealBox);
+  document.getElementById("revealBoardTopBtn").addEventListener("click", triggerRevealBoard);
+
+  // ---- Leaderboard top toolbar button --------------------------------------
+  // Opens the Leaderboard & Activity panel (same one behind the "Leaderboard
+  // & Activity" link below the board) and scrolls it into view.
+  document.getElementById("leaderboardTopBtn").addEventListener("click", function () {
+    setDetailsOpen(true);
+    detailsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   // ---- Test mode: bot auto-solve ------------------------------------------
