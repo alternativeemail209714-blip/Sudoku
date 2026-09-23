@@ -7,5 +7,5 @@ services:
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
-      - key: EULERSTREAM_API_KEY
+      - key: EULERSTREAM_SIGN_API_KEY
         sync: false

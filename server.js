@@ -540,17 +540,63 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
     lastActivityAt = Date.now();
   }
 
+  // Newer tiktok-live-connector versions decode several protobuf fields
+  // (userId, msgId, roomId, etc.) as native BigInt. JSON.stringify() throws
+  // a hard TypeError ("Do not know how to serialize a BigInt") the instant
+  // it meets one of those fields - it does not skip it or stringify it as
+  // a number. A BigInt-aware replacer avoids that crash.
+  function safeStringifyForLog(data) {
+    try {
+      return JSON.stringify(data, function (key, value) {
+        return typeof value === "bigint" ? value.toString() : value;
+      }).slice(0, 500);
+    } catch (e) {
+      return "[could not stringify chat payload for logging: " + (e && e.message ? e.message : e) + "]";
+    }
+  }
+
   function wireEvents(connection) {
     var chatEventName = (WebcastEvent && WebcastEvent.CHAT) || "chat";
     connection.on(chatEventName, function (data) {
+      // THE FIX: every incoming chat message used to be logged via
+      // `JSON.stringify(data)` BEFORE the guess was parsed and applied.
+      // TikTok chat payloads routinely contain BigInt fields, and
+      // JSON.stringify() throws on those - which meant this whole handler
+      // threw on essentially every real viewer comment, was swallowed by
+      // the catch block below, and onChat()/extractChatFields() never ran.
+      // That's exactly the "status shows Connected, but guesses never
+      // register" symptom: the connection itself was fine, every chat
+      // event was arriving, but the debug log line was crashing the
+      // handler before the guess could be parsed.
+      //
+      // Fix: parse and apply the guess FIRST, each step in its own
+      // try/catch, and do the (now BigInt-safe) debug logging last so a
+      // logging failure can never again block real gameplay.
+      markActivity();
+
+      var extracted = null;
       try {
-        markActivity();
-        console.log("[TikTok raw chat event]", JSON.stringify(data).slice(0, 500));
-        onRawEvent(data);
-        var extracted = extractChatFields(data);
+        extracted = extractChatFields(data);
+      } catch (err) {
+        console.error("[chat extraction error - swallowed, server kept running]", err);
+      }
+
+      try {
         if (extracted) onChat(extracted);
       } catch (err) {
-        console.error("[chat handler error - swallowed, server kept running]", err);
+        console.error("[onChat handler error - swallowed, server kept running]", err);
+      }
+
+      try {
+        onRawEvent(data);
+      } catch (err) {
+        console.error("[onRawEvent error - swallowed, server kept running]", err);
+      }
+
+      try {
+        console.log("[TikTok raw chat event]", safeStringifyForLog(data));
+      } catch (err) {
+        console.error("[chat debug log error - swallowed, server kept running]", err);
       }
     });
 
