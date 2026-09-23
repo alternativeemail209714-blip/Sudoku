@@ -241,10 +241,8 @@ html, body {
 .toolbar-dropdown { position: relative; flex: 0 0 auto; }
 .toolbar-dropdown-trigger { display: flex; align-items: center; justify-content: center; padding: 0; }
 .toolbar-dropdown-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
+  position: fixed;
+  z-index: 90;
   list-style: none;
   margin: 0;
   padding: 6px;

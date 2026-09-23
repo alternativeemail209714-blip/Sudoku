@@ -1,5 +1,16 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v2.1 changes:
+  - Fixed the Difficulty and Theme dropdowns in the top toolbar not
+    opening/responding on tap. Root cause: the toolbar row scrolls
+    sideways on narrow phones (`overflow-x: auto`), and the browser's
+    overflow rules also clip vertical overflow on an element once any
+    axis is clipped - so the dropdown menu was being invisibly cut off
+    the instant it tried to appear below its button. Both menus are now
+    positioned as fixed, floating panels computed from the button's
+    on-screen position each time they open, so they're no longer
+    affected by the toolbar's scroll clipping and open reliably.
+
 v2.0 changes:
   - Top toolbar's Difficulty control is no longer a text dropdown that
     could get cut off on narrow phones - it's now a small icon button

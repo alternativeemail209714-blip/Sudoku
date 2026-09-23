@@ -104,6 +104,27 @@
     var btn = document.getElementById(btnId);
     var menu = document.getElementById(menuId);
     if (!root || !btn || !menu) return null;
+
+    // The toolbar row (.top-bar-actions) needs `overflow-x: auto` so it can
+    // scroll sideways on narrow phones - but per the CSS overflow spec, an
+    // element that clips one axis also clips the other, so the menu was
+    // being silently cut off the moment it tried to open below the button.
+    // Moving the menu out to <body> and positioning it with `fixed`
+    // (computed fresh from the button's on-screen position every time it
+    // opens) sidesteps that clipping entirely.
+    document.body.appendChild(menu);
+
+    function positionMenu() {
+      var rect = btn.getBoundingClientRect();
+      var menuWidth = Math.max(menu.offsetWidth, 176);
+      var left = rect.right - menuWidth;
+      if (left < 8) left = 8;
+      var top = rect.bottom + 6;
+      menu.style.left = left + "px";
+      menu.style.top = top + "px";
+      var maxTop = window.innerHeight - 12;
+      if (top > maxTop) menu.style.top = maxTop + "px";
+    }
     function close() {
       menu.hidden = true;
       btn.setAttribute("aria-expanded", "false");
@@ -111,25 +132,30 @@
     function open() {
       closeAllToolbarDropdowns();
       menu.hidden = false;
+      positionMenu();
       btn.setAttribute("aria-expanded", "true");
     }
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
       if (menu.hidden) open(); else close();
     });
+    menu.addEventListener("click", function (e) { e.stopPropagation(); });
     menu.querySelectorAll('li[role="option"]').forEach(function (li) {
       li.addEventListener("click", function () {
         close();
         onSelect(li.getAttribute("data-value"));
       });
     });
-    var entry = { close: close, root: root };
+    window.addEventListener("resize", function () {
+      if (!menu.hidden) positionMenu();
+    });
+    var entry = { close: close, root: root, menu: menu };
     openToolbarDropdowns.push(entry);
     return entry;
   }
   document.addEventListener("click", function (e) {
     openToolbarDropdowns.forEach(function (d) {
-      if (!d.root.contains(e.target)) d.close();
+      if (!d.root.contains(e.target) && !d.menu.contains(e.target)) d.close();
     });
   });
   document.addEventListener("keydown", function (e) {
