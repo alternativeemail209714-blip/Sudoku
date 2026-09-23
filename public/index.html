@@ -22,6 +22,12 @@
   </div>
 
   <main class="board-stage">
+    <!-- Live guess feed: floating pill for each incoming answer (correct,
+         wrong, already-answered, or wrong format), with the viewer's
+         circular avatar, name and points. Sits in the gap between the
+         chat-format hint above and the status/timer row below. -->
+    <div id="liveGuessToastArea" class="live-guess-toast-area" aria-live="polite"></div>
+
     <div class="puzzle-topline">
       <span id="liveStatusMini" class="live-status-mini status-idle">&#9679; Offline</span>
       <span id="stopwatch" class="stopwatch" title="Time elapsed - there is no time limit">&#9201; 00:00</span>
@@ -67,6 +73,19 @@
       <button id="hostConsoleBtn" class="btn btn-primary">Send</button>
     </div>
   </footer>
+
+  <!-- Round-end floating windows: shows the round's top scorers first,
+       then the all-time top scorers, each with circular avatar, name and
+       points. Auto-dismisses, or close it early with the X. -->
+  <div id="roundEndOverlay" class="round-end-overlay" hidden>
+    <div class="round-end-card">
+      <div class="round-end-head">
+        <h2 id="roundEndTitle">Round Results</h2>
+        <button id="roundEndCloseBtn" class="icon-btn" aria-label="Close">&#10005;</button>
+      </div>
+      <ol id="roundEndList" class="round-end-list"></ol>
+    </div>
+  </div>
 
   <!-- Settings drawer: mode switching, TikTok connect, test tools, new puzzle -->
   <div id="settingsOverlay" class="settings-overlay" hidden>

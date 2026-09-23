@@ -221,16 +221,18 @@ function createGameState() {
     state.autoNextRound = !!enabled;
   }
 
-  function ensurePlayer(uniqueId, displayName) {
+  function ensurePlayer(uniqueId, displayName, avatarUrl) {
     if (!state.scores[uniqueId]) {
-      state.scores[uniqueId] = { name: displayName || uniqueId, correct: 0, wrong: 0, points: 0 };
-    } else if (displayName) {
-      state.scores[uniqueId].name = displayName;
+      state.scores[uniqueId] = { name: displayName || uniqueId, avatar: avatarUrl || null, correct: 0, wrong: 0, points: 0 };
+    } else {
+      if (displayName) state.scores[uniqueId].name = displayName;
+      if (avatarUrl) state.scores[uniqueId].avatar = avatarUrl;
     }
     if (!state.allTimeScores[uniqueId]) {
-      state.allTimeScores[uniqueId] = { name: displayName || uniqueId, correct: 0, wrong: 0, points: 0 };
-    } else if (displayName) {
-      state.allTimeScores[uniqueId].name = displayName;
+      state.allTimeScores[uniqueId] = { name: displayName || uniqueId, avatar: avatarUrl || null, correct: 0, wrong: 0, points: 0 };
+    } else {
+      if (displayName) state.allTimeScores[uniqueId].name = displayName;
+      if (avatarUrl) state.allTimeScores[uniqueId].avatar = avatarUrl;
     }
   }
 
@@ -243,14 +245,14 @@ function createGameState() {
     return true;
   }
 
-  function applyGuess(row, col, num, uniqueId, displayName) {
+  function applyGuess(row, col, num, uniqueId, displayName, avatarUrl) {
     if (state.givenMask[row][col]) {
       return { status: "given", coord: coordLabel(row, col) };
     }
     if (state.board[row][col] === state.solution[row][col] && state.board[row][col] !== 0) {
       return { status: "already-solved", coord: coordLabel(row, col) };
     }
-    ensurePlayer(uniqueId, displayName);
+    ensurePlayer(uniqueId, displayName, avatarUrl);
     var correct = state.solution[row][col] === num;
     if (correct) {
       state.board[row][col] = num;
@@ -276,7 +278,7 @@ function createGameState() {
   function buildLeaderboard(scoresObj, limit) {
     var entries = Object.keys(scoresObj).map(function (id) {
       var s = scoresObj[id];
-      return { uniqueId: id, name: s.name, correct: s.correct, wrong: s.wrong, points: s.points };
+      return { uniqueId: id, name: s.name, avatar: s.avatar || null, correct: s.correct, wrong: s.wrong, points: s.points };
     });
     entries.sort(function (a, b) {
       if (b.points !== a.points) return b.points - a.points;
@@ -364,7 +366,31 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
     else if (data.user && data.user.displayName) nickname = data.user.displayName;
     else if (data.nickname) nickname = data.nickname;
 
-    return { text: String(text), uniqueId: String(uniqueId), nickname: String(nickname) };
+    // TikTok's live-connector library has shipped several different shapes
+    // for the viewer's profile picture across versions, so we try each of
+    // the known spots and fall back to null (the client then draws a
+    // generated circular initials avatar instead).
+    var avatarUrl = null;
+    function firstUrl(obj) {
+      if (!obj) return null;
+      if (typeof obj === "string") return obj;
+      if (Array.isArray(obj) && obj.length) return obj[0];
+      if (obj.urlList && obj.urlList.length) return obj.urlList[0];
+      if (obj.url && Array.isArray(obj.url) && obj.url.length) return obj.url[0];
+      if (obj.url && typeof obj.url === "string") return obj.url;
+      if (obj.urls && obj.urls.length) return obj.urls[0];
+      return null;
+    }
+    if (data.user) {
+      avatarUrl = firstUrl(data.user.profilePicture) ||
+        firstUrl(data.user.avatarThumbnail) ||
+        firstUrl(data.user.avatarMedium) ||
+        firstUrl(data.user.avatarLarger) ||
+        (typeof data.user.avatarUrl === "string" ? data.user.avatarUrl : null);
+    }
+    if (!avatarUrl && typeof data.avatarUrl === "string") avatarUrl = data.avatarUrl;
+
+    return { text: String(text), uniqueId: String(uniqueId), nickname: String(nickname), avatarUrl: avatarUrl ? String(avatarUrl) : null };
   }
 
   function wireEvents(connection) {
@@ -500,20 +526,29 @@ function scheduleAutoNext() {
   }, AUTO_NEXT_DELAY_MS);
 }
 
-function processComment(text, uniqueId, nickname, source) {
+// Remembers the last-known avatar for each viewer id, so a viewer's photo
+// stays attached to their wrong/unparsed guesses too, not just correct ones
+// (those don't otherwise touch the score tables where avatars are stored).
+var avatarCache = {};
+
+function processComment(text, uniqueId, nickname, source, avatarUrl) {
+  if (avatarUrl) avatarCache[uniqueId] = avatarUrl;
+  var knownAvatar = avatarUrl || avatarCache[uniqueId] || null;
+
   game.state.rawEventCount += 1;
   game.state.lastReceived = { uniqueId: uniqueId, nickname: nickname, text: text, source: source, at: Date.now() };
   io.emit("diagnostics", { rawEventCount: game.state.rawEventCount, lastReceived: game.state.lastReceived });
 
   var parsed = parseGuess(text);
   if (!parsed) {
-    io.emit("guessResult", { uniqueId: uniqueId, nickname: nickname, text: text, status: "unparsed" });
+    io.emit("guessResult", { uniqueId: uniqueId, nickname: nickname, avatar: knownAvatar, text: text, status: "unparsed" });
     return;
   }
-  var result = game.applyGuess(parsed.row, parsed.col, parsed.num, uniqueId, nickname);
+  var result = game.applyGuess(parsed.row, parsed.col, parsed.num, uniqueId, nickname, knownAvatar);
   io.emit("guessResult", {
     uniqueId: uniqueId,
     nickname: nickname,
+    avatar: knownAvatar,
     text: text,
     coord: parsed.coordLabel,
     num: parsed.num,
@@ -533,7 +568,7 @@ function processComment(text, uniqueId, nickname, source) {
 
 var tiktok = createTikTokConnector(
   function onChat(fields) {
-    processComment(fields.text, fields.uniqueId, fields.nickname, "tiktok-live");
+    processComment(fields.text, fields.uniqueId, fields.nickname, "tiktok-live", fields.avatarUrl);
   },
   function onStatus(state, message) {
     io.emit("liveStatus", { state: state, message: message });
@@ -581,12 +616,12 @@ io.on("connection", function (socket) {
 
   socket.on("host:comment", safe(function (payload) {
     if (!payload || !payload.text) return;
-    processComment(payload.text, "host", "Host (You)", "host-console");
+    processComment(payload.text, "host", "Host (You)", "host-console", null);
   }));
 
   socket.on("offline:guess", safe(function (payload) {
     if (!payload || !payload.text) return;
-    processComment(payload.text, "offline-player", "You", "offline");
+    processComment(payload.text, "offline-player", "You", "offline", null);
   }));
 
   socket.on("test:simulate", safe(function (payload) {
@@ -599,7 +634,7 @@ io.on("connection", function (socket) {
       var num = useRealAnswer ? game.state.solution[row][col] : (Math.floor(Math.random() * 9) + 1);
       text = String.fromCharCode(65 + row) + (col + 1) + " " + num;
     }
-    processComment(text, "fake-" + name, name, "test-mode");
+    processComment(text, "fake-" + name, name, "test-mode", null);
   }));
 
   socket.on("disconnect", function () {

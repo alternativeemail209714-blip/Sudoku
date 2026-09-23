@@ -1,5 +1,27 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v1.5 changes:
+  - Fixed a bug where the Light theme looked half-broken (dark patches
+    around the edges) while in Full Screen mode. The browser's fullscreen
+    "backdrop" layer, which sits behind the fullscreened app, was always
+    plain black by default and wasn't matching the chosen theme - it is
+    now explicitly themed too.
+  - Round-end floating windows: right when a puzzle is solved, a floating
+    window shows that round's top scorers (circular TikTok profile photo,
+    name, points), then automatically swaps to a second floating window
+    showing the All-Time top scorers. Close either early with the X.
+  - Live guess feed: a new floating pill appears in the gap between the
+    "Chat format" hint and the status/timer row for every incoming guess,
+    showing the viewer's circular photo, name and what happened - a
+    correct guess (+1), a wrong answer, a coordinate that was already
+    answered, or an unrecognized/wrong format.
+  - Leaderboards (this round and all-time) now show each viewer's
+    circular TikTok profile photo next to their name. When a real photo
+    isn't available (Test/Offline/Host modes, or if TikTok doesn't supply
+    one), a generated circular avatar with the viewer's initials is used
+    instead so the layout always looks the same.
+
+
 This folder is the exact, finished app. Push this whole folder to GitHub and deploy
 it on Render.com as a "Web Service".
 

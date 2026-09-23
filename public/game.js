@@ -155,6 +155,49 @@
 
   var currentMode = "offline";
 
+  // ---- Avatars (real TikTok photo when known, generated initials otherwise) --
+  function hashStringToHue(str) {
+    var hash = 0;
+    str = String(str || "?");
+    for (var i = 0; i < str.length; i++) {
+      hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return hash % 360;
+  }
+  function initialsFor(name) {
+    var trimmed = String(name || "?").trim();
+    if (!trimmed) return "?";
+    var parts = trimmed.split(/\s+/);
+    var initials = parts[0].charAt(0);
+    if (parts.length > 1) initials += parts[parts.length - 1].charAt(0);
+    return initials.toUpperCase();
+  }
+  function generatedAvatarDataUri(seed, name) {
+    var hue = hashStringToHue(seed || name);
+    var bg = "hsl(" + hue + ", 55%, 45%)";
+    var initials = initialsFor(name);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+      '<circle cx="32" cy="32" r="32" fill="' + bg + '"/>' +
+      '<text x="32" y="41" font-family="Segoe UI, Arial, sans-serif" font-size="26" ' +
+      'font-weight="700" fill="#ffffff" text-anchor="middle">' + initials + '</text></svg>';
+    return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+  }
+  function makeAvatarImg(avatarUrl, uniqueId, name, sizeClass) {
+    var img = document.createElement("img");
+    img.className = "avatar-circle" + (sizeClass ? " " + sizeClass : "");
+    img.alt = "";
+    img.loading = "lazy";
+    var fallback = generatedAvatarDataUri(uniqueId, name);
+    img.src = avatarUrl || fallback;
+    // A real TikTok photo URL can occasionally fail to load (expired CDN
+    // link, offline, etc.) - fall back to the generated avatar instead of
+    // showing a broken image icon.
+    img.addEventListener("error", function () {
+      if (img.src !== fallback) img.src = fallback;
+    });
+    return img;
+  }
+
   // ---- Stopwatch (informational only - there is NO time limit) ------------
   // The clock just tells everyone how long the current puzzle has taken so
   // far. Once solved, it freezes on the server-reported solve time.
@@ -302,22 +345,24 @@
     }
   }
 
-  function renderLeaderboard(list) {
-    leaderboardListEl.innerHTML = "";
+  function renderScoreListInto(listEl, list) {
+    listEl.innerHTML = "";
     (list || []).forEach(function (entry) {
       var li = document.createElement("li");
-      li.textContent = entry.name + " - " + entry.points + " pt" + (entry.points === 1 ? "" : "s");
-      leaderboardListEl.appendChild(li);
+      li.appendChild(makeAvatarImg(entry.avatar, entry.uniqueId, entry.name));
+      var span = document.createElement("span");
+      span.textContent = entry.name + " - " + entry.points + " pt" + (entry.points === 1 ? "" : "s");
+      li.appendChild(span);
+      listEl.appendChild(li);
     });
   }
 
+  function renderLeaderboard(list) {
+    renderScoreListInto(leaderboardListEl, list);
+  }
+
   function renderAllTimeLeaderboard(list) {
-    allTimeLeaderboardListEl.innerHTML = "";
-    (list || []).forEach(function (entry) {
-      var li = document.createElement("li");
-      li.textContent = entry.name + " - " + entry.points + " pt" + (entry.points === 1 ? "" : "s");
-      allTimeLeaderboardListEl.appendChild(li);
-    });
+    renderScoreListInto(allTimeLeaderboardListEl, list);
   }
 
   function addFeedItem(text, cls) {
@@ -328,6 +373,107 @@
     while (feedListEl.children.length > 40) {
       feedListEl.removeChild(feedListEl.lastChild);
     }
+  }
+
+  // ---- Live guess toast area (the gap between the chat-format hint and
+  //      the status/timer row) - a floating pill per incoming guess. -----
+  var liveGuessToastAreaEl = document.getElementById("liveGuessToastArea");
+  var MAX_TOASTS = 4;
+  var TOAST_LIFETIME_MS = 4200;
+
+  function pushGuessToast(cls, avatarUrl, uniqueId, name, detailText, pointsText) {
+    var toast = document.createElement("div");
+    toast.className = "guess-toast " + cls;
+    toast.appendChild(makeAvatarImg(avatarUrl, uniqueId, name));
+    var nameSpan = document.createElement("span");
+    nameSpan.className = "guess-name";
+    nameSpan.textContent = name;
+    toast.appendChild(nameSpan);
+    var detailSpan = document.createElement("span");
+    detailSpan.className = "guess-detail";
+    detailSpan.textContent = detailText;
+    toast.appendChild(detailSpan);
+    if (pointsText) {
+      var ptSpan = document.createElement("span");
+      ptSpan.className = "guess-points";
+      ptSpan.textContent = pointsText;
+      toast.appendChild(ptSpan);
+    }
+    liveGuessToastAreaEl.appendChild(toast);
+    while (liveGuessToastAreaEl.children.length > MAX_TOASTS) {
+      liveGuessToastAreaEl.removeChild(liveGuessToastAreaEl.firstChild);
+    }
+    setTimeout(function () {
+      toast.classList.add("leaving");
+      setTimeout(function () {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 350);
+    }, TOAST_LIFETIME_MS);
+  }
+
+  // ---- Round-end floating windows: round top scorers, then all-time ----
+  var roundEndOverlayEl = document.getElementById("roundEndOverlay");
+  var roundEndTitleEl = document.getElementById("roundEndTitle");
+  var roundEndListEl = document.getElementById("roundEndList");
+  var roundEndCloseBtn = document.getElementById("roundEndCloseBtn");
+  var roundEndTimers = [];
+
+  function clearRoundEndTimers() {
+    roundEndTimers.forEach(function (t) { clearTimeout(t); });
+    roundEndTimers = [];
+  }
+  function hideRoundEndOverlay() {
+    clearRoundEndTimers();
+    roundEndOverlayEl.hidden = true;
+  }
+  roundEndCloseBtn.addEventListener("click", hideRoundEndOverlay);
+
+  function renderRoundEndList(list) {
+    roundEndListEl.innerHTML = "";
+    var top = (list || []).slice(0, 5);
+    if (!top.length) {
+      var empty = document.createElement("li");
+      empty.textContent = "No scorers yet.";
+      roundEndListEl.appendChild(empty);
+      return;
+    }
+    top.forEach(function (entry, idx) {
+      var li = document.createElement("li");
+      var rank = document.createElement("span");
+      rank.className = "round-end-rank";
+      rank.textContent = "#" + (idx + 1);
+      li.appendChild(rank);
+      li.appendChild(makeAvatarImg(entry.avatar, entry.uniqueId, entry.name, "lg"));
+      var nameSpan = document.createElement("span");
+      nameSpan.className = "round-end-name";
+      nameSpan.textContent = entry.name;
+      li.appendChild(nameSpan);
+      var ptSpan = document.createElement("span");
+      ptSpan.className = "round-end-points";
+      ptSpan.textContent = entry.points + " pt" + (entry.points === 1 ? "" : "s");
+      li.appendChild(ptSpan);
+      roundEndListEl.appendChild(li);
+    });
+  }
+
+  function showRoundEndOverlay(title, list) {
+    roundEndTitleEl.textContent = title;
+    renderRoundEndList(list);
+    roundEndOverlayEl.hidden = false;
+  }
+
+  // Shows the round's top scorers first, then automatically swaps to the
+  // all-time top scorers a few seconds later, then auto-dismisses. The X
+  // button (or clicking outside via close) can dismiss it early any time.
+  function showRoundEndSequence(roundList, allTimeList) {
+    clearRoundEndTimers();
+    showRoundEndOverlay("This Round's Top Scorers", roundList);
+    roundEndTimers.push(setTimeout(function () {
+      showRoundEndOverlay("All-Time Top Scorers", allTimeList);
+      roundEndTimers.push(setTimeout(function () {
+        roundEndOverlayEl.hidden = true;
+      }, 5000));
+    }, 5000));
   }
 
   var MINI_LABELS = {
@@ -378,14 +524,20 @@
     var name = res.nickname || res.uniqueId || "viewer";
     if (res.status === "correct") {
       addFeedItem(name + " placed " + res.num + " at " + res.coord + " (+1)", "feed-correct");
+      pushGuessToast("toast-correct", res.avatar, res.uniqueId, name, "placed " + res.num + " at " + res.coord, "+1");
     } else if (res.status === "wrong") {
       addFeedItem(name + " tried " + res.num + " at " + res.coord + " (wrong)", "feed-wrong");
+      pushGuessToast("toast-wrong", res.avatar, res.uniqueId, name, "wrong answer at " + res.coord);
     } else if (res.status === "given") {
       addFeedItem(name + " tried " + res.coord + " but it is a pre-filled clue", "feed-info");
+      pushGuessToast("toast-info", res.avatar, res.uniqueId, name, res.coord + " already answered");
     } else if (res.status === "already-solved") {
       addFeedItem(name + " tried " + res.coord + " but it is already solved", "feed-info");
+      pushGuessToast("toast-info", res.avatar, res.uniqueId, name, res.coord + " already answered");
     } else if (res.status === "unparsed") {
-      // not a valid coordinate guess - ignore silently in the feed to avoid spam
+      // Not a recognized coordinate format - now surfaced in the live toast
+      // feed too (per request) instead of being ignored silently.
+      pushGuessToast("toast-format", res.avatar, res.uniqueId, name, "wrong format - try e.g. A5 7");
     }
   });
 
@@ -400,6 +552,7 @@
     roundIsSolved = true;
     if (typeof data.solveTimeMs === "number") roundSolveTimeMs = data.solveTimeMs;
     tickStopwatch();
+    showRoundEndSequence(data.leaderboard, data.allTimeLeaderboard);
   });
 
   socket.on("autoNextCountdown", function (data) {
@@ -476,6 +629,7 @@
     socket.emit("host:newPuzzle", { difficulty: difficulty });
     solvedBannerEl.hidden = true;
     clearAutoNextCountdown();
+    hideRoundEndOverlay();
     closeSettings();
   });
 

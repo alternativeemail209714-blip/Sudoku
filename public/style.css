@@ -219,10 +219,10 @@ html, body {
   font-size: 13px;
 }
 .diagnostics-box h3, .leaderboard-box h3, .feed-box h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--cyan); }
-#leaderboardList { margin: 0; padding-left: 18px; }
-#leaderboardList li { margin-bottom: 4px; }
-#allTimeLeaderboardList { margin: 0; padding-left: 18px; }
-#allTimeLeaderboardList li { margin-bottom: 4px; }
+#leaderboardList { margin: 0; padding-left: 0; list-style: none; }
+#leaderboardList li { margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+#allTimeLeaderboardList { margin: 0; padding-left: 0; list-style: none; }
+#allTimeLeaderboardList li { margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
 #feedList { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 #feedList li { padding: 3px 0; border-bottom: 1px solid var(--border); }
 .feed-correct { color: var(--success); }
@@ -458,6 +458,20 @@ html, body {
 .app-shell:-ms-fullscreen {
   background: var(--bg);
   justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+/* The browser paints a solid ::backdrop layer behind the fullscreened
+   element. It defaults to plain black in every browser, and since our
+   app-shell can be shorter than the physical screen (e.g. a short puzzle
+   view, or a device with an unusual aspect ratio / on-screen keyboard),
+   that black backdrop peeks through - which looked like the Light theme
+   going "half dark" in fullscreen. Explicitly theming the backdrop to
+   match the current theme's background fixes it in both themes. */
+.app-shell::backdrop,
+.app-shell::-webkit-full-screen-backdrop {
+  background: var(--bg);
 }
 .app-shell:fullscreen .board-stage,
 .app-shell:-webkit-full-screen .board-stage,
@@ -481,3 +495,118 @@ html, body {
     font-size: clamp(16px, 3vw, 30px);
   }
 }
+
+/* ---- Circular avatars (real TikTok photo, or generated initials) ---- */
+.avatar-circle {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--given);
+  border: 1px solid var(--border);
+}
+.avatar-circle.lg { width: 40px; height: 40px; }
+
+/* ---- Live guess toast area --------------------------------------------
+   Sits in the gap between the "Chat format" hint and the status/timer
+   row. Each incoming guess (correct, wrong, already-answered, or wrong
+   format) appears here as a floating pill with the viewer's avatar, then
+   fades out on its own. Stacks a few at a time. */
+.live-guess-toast-area {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 4px;
+  margin-bottom: 6px;
+}
+.guess-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+  opacity: 0;
+  transform: translateY(-6px);
+  animation: guessToastIn 0.25s ease forwards;
+}
+.guess-toast.leaving {
+  animation: guessToastOut 0.35s ease forwards;
+}
+@keyframes guessToastIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes guessToastOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+.guess-toast .guess-name { font-weight: 700; }
+.guess-toast .guess-detail { color: var(--text-dim); }
+.guess-toast.toast-correct { border-color: var(--correct); }
+.guess-toast.toast-correct .guess-points { color: var(--success); font-weight: 700; margin-left: auto; }
+.guess-toast.toast-wrong { border-color: var(--danger); }
+.guess-toast.toast-wrong .guess-detail { color: var(--danger); }
+.guess-toast.toast-info { border-color: var(--warning); }
+.guess-toast.toast-info .guess-detail { color: var(--warning); }
+.guess-toast.toast-format { opacity: 0.85; }
+.guess-toast.toast-format .guess-detail { color: var(--text-dim); font-style: italic; }
+
+/* ---- Round-end floating windows (round top scorers, then all-time) --- */
+.round-end-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  padding: 20px;
+}
+.round-end-overlay[hidden] { display: none; }
+.round-end-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+  animation: roundEndPop 0.2s ease;
+}
+@keyframes roundEndPop {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+.round-end-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.round-end-head h2 { margin: 0; font-size: 16px; color: var(--cyan); }
+.round-end-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.round-end-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--bg-input);
+}
+.round-end-rank {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.round-end-name { flex: 1; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.round-end-points { flex: 0 0 auto; font-weight: 700; color: var(--success); font-size: 13.5px; }
