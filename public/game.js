@@ -198,6 +198,33 @@
     return img;
   }
 
+  // ---- Floating window timing preferences ---------------------------------
+  // Customizable display durations for the live guess toast and the two
+  // round-end floating windows (this round's scorers, then all-time), plus
+  // how long until the next round auto-starts. The first three are purely
+  // cosmetic and remembered on this device only; the next-round delay is
+  // shared with every viewer, so changing it talks to the server.
+  var TIMING_DEFAULTS = {
+    toastSeconds: 4.2,
+    roundWindowSeconds: 5,
+    allTimeWindowSeconds: 5,
+    autoNextDelaySeconds: 10
+  };
+  var TIMING_STORAGE_KEY = "sudokuLiveTiming";
+  function loadTimingPrefs() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(TIMING_STORAGE_KEY) || "null"); } catch (e) { /* ignore */ }
+    return {
+      toastSeconds: (saved && typeof saved.toastSeconds === "number") ? saved.toastSeconds : TIMING_DEFAULTS.toastSeconds,
+      roundWindowSeconds: (saved && typeof saved.roundWindowSeconds === "number") ? saved.roundWindowSeconds : TIMING_DEFAULTS.roundWindowSeconds,
+      allTimeWindowSeconds: (saved && typeof saved.allTimeWindowSeconds === "number") ? saved.allTimeWindowSeconds : TIMING_DEFAULTS.allTimeWindowSeconds
+    };
+  }
+  function saveTimingPrefs(prefs) {
+    try { localStorage.setItem(TIMING_STORAGE_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
+  }
+  var timingPrefs = loadTimingPrefs();
+
   // ---- Stopwatch (informational only - there is NO time limit) ------------
   // The clock just tells everyone how long the current puzzle has taken so
   // far. Once solved, it freezes on the server-reported solve time.
@@ -224,25 +251,34 @@
 
   // ---- Auto Next Round countdown banner ------------------------------------
   var autoNextCountdownTimer = null;
+  var roundEndCountdownEl = document.getElementById("roundEndCountdown");
   function clearAutoNextCountdown() {
     if (autoNextCountdownTimer) {
       clearInterval(autoNextCountdownTimer);
       autoNextCountdownTimer = null;
     }
     autoNextCountdownEl.hidden = true;
+    if (roundEndCountdownEl) roundEndCountdownEl.hidden = true;
+  }
+  function updateAutoNextCountdownText(remaining) {
+    autoNextCountdownEl.textContent = "Next puzzle starts in " + remaining + "s...";
+    if (roundEndCountdownEl) {
+      roundEndCountdownEl.hidden = false;
+      roundEndCountdownEl.textContent = "Next round starts in " + remaining + "s...";
+    }
   }
   function startAutoNextCountdown(seconds) {
     var remaining = Math.max(0, Math.round(seconds));
     clearAutoNextCountdown();
     autoNextCountdownEl.hidden = false;
-    autoNextCountdownEl.textContent = "Next puzzle starts in " + remaining + "s...";
+    updateAutoNextCountdownText(remaining);
     autoNextCountdownTimer = setInterval(function () {
       remaining -= 1;
       if (remaining <= 0) {
         clearAutoNextCountdown();
         return;
       }
-      autoNextCountdownEl.textContent = "Next puzzle starts in " + remaining + "s...";
+      updateAutoNextCountdownText(remaining);
     }, 1000);
   }
 
@@ -345,10 +381,22 @@
     }
   }
 
+  // ---- Rank badges: gold/silver/bronze medals for 1st/2nd/3rd place ------
+  function rankBadge(idx) {
+    if (idx === 0) return "\uD83E\uDD47"; // gold medal
+    if (idx === 1) return "\uD83E\uDD48"; // silver medal
+    if (idx === 2) return "\uD83E\uDD49"; // bronze medal
+    return "#" + (idx + 1);
+  }
+
   function renderScoreListInto(listEl, list) {
     listEl.innerHTML = "";
-    (list || []).forEach(function (entry) {
+    (list || []).forEach(function (entry, idx) {
       var li = document.createElement("li");
+      var rank = document.createElement("span");
+      rank.className = "inline-rank" + (idx < 3 ? " inline-rank-medal" : "");
+      rank.textContent = rankBadge(idx);
+      li.appendChild(rank);
       li.appendChild(makeAvatarImg(entry.avatar, entry.uniqueId, entry.name));
       var span = document.createElement("span");
       span.textContent = entry.name + " - " + entry.points + " pt" + (entry.points === 1 ? "" : "s");
@@ -382,7 +430,7 @@
   // toast is ever shown at a time - a new one immediately replaces
   // whatever is currently showing instead of stacking up.
   var liveGuessToastAreaEl = document.getElementById("liveGuessToastArea");
-  var TOAST_LIFETIME_MS = 4200;
+  var TOAST_LIFETIME_MS = Math.round(timingPrefs.toastSeconds * 1000);
   var toastHideTimer = null;
 
   function clearCurrentToast() {
@@ -437,21 +485,24 @@
   }
   roundEndCloseBtn.addEventListener("click", hideRoundEndOverlay);
 
-  function renderRoundEndList(list, capped) {
-    roundEndListEl.innerHTML = "";
-    roundEndListEl.classList.toggle("capped-20", !!capped);
+  // Shared by the round-end floating window and the Leaderboard floating
+  // window: renders a ranked list into any <ol>, with gold/silver/bronze
+  // medals for the top 3 places.
+  function renderRankedList(listEl, list, capped) {
+    listEl.innerHTML = "";
+    listEl.classList.toggle("capped-20", !!capped);
     var top = list || [];
     if (!top.length) {
       var empty = document.createElement("li");
       empty.textContent = "No scorers yet.";
-      roundEndListEl.appendChild(empty);
+      listEl.appendChild(empty);
       return;
     }
     top.forEach(function (entry, idx) {
       var li = document.createElement("li");
       var rank = document.createElement("span");
-      rank.className = "round-end-rank";
-      rank.textContent = "#" + (idx + 1);
+      rank.className = "round-end-rank" + (idx < 3 ? " round-end-rank-medal" : "");
+      rank.textContent = rankBadge(idx);
       li.appendChild(rank);
       li.appendChild(makeAvatarImg(entry.avatar, entry.uniqueId, entry.name, "lg"));
       var nameSpan = document.createElement("span");
@@ -462,31 +513,66 @@
       ptSpan.className = "round-end-points";
       ptSpan.textContent = entry.points + " pt" + (entry.points === 1 ? "" : "s");
       li.appendChild(ptSpan);
-      roundEndListEl.appendChild(li);
+      listEl.appendChild(li);
     });
   }
 
   function showRoundEndOverlay(title, list, capped) {
     roundEndTitleEl.textContent = title;
-    renderRoundEndList(list, capped);
+    renderRankedList(roundEndListEl, list, capped);
     roundEndOverlayEl.hidden = false;
   }
 
   // Shows the round's top scorers first (everyone who scored, however
   // many that is), then automatically swaps to the all-time top scorers
-  // (shown ~20 at a time, scrollable for the rest) a few seconds later,
-  // then auto-dismisses. The X button (or clicking outside) can dismiss
-  // it early any time.
+  // (shown ~20 at a time, scrollable for the rest) after a customizable
+  // delay, then auto-dismisses after another customizable delay. The X
+  // button (or clicking outside) can dismiss it early any time. Both
+  // delays come from timingPrefs (Settings -> Floating Window Timing).
   function showRoundEndSequence(roundList, allTimeList) {
     clearRoundEndTimers();
     showRoundEndOverlay("This Round's Top Scorers", roundList, false);
+    var roundMs = Math.round(timingPrefs.roundWindowSeconds * 1000);
+    var allTimeMs = Math.round(timingPrefs.allTimeWindowSeconds * 1000);
     roundEndTimers.push(setTimeout(function () {
       showRoundEndOverlay("All-Time Top Scorers", allTimeList, true);
       roundEndTimers.push(setTimeout(function () {
         roundEndOverlayEl.hidden = true;
-      }, 5000));
-    }, 5000));
+      }, allTimeMs));
+    }, roundMs));
   }
+
+  // ---- Leaderboard floating window (opened from the top-toolbar trophy) ---
+  // Centrally located, tabbed between "This Round" and "All-Time". Stays in
+  // sync live: whenever fresh leaderboard data arrives, re-render it if the
+  // window happens to be open.
+  var leaderboardOverlayEl = document.getElementById("leaderboardOverlay");
+  var leaderboardModalCloseBtn = document.getElementById("leaderboardModalCloseBtn");
+  var leaderboardModalRoundListEl = document.getElementById("leaderboardModalRoundList");
+  var leaderboardModalAllTimeListEl = document.getElementById("leaderboardModalAllTimeList");
+  var lbModalTabs = document.querySelectorAll(".lb-modal-tab");
+  var lastLeaderboardData = { round: [], allTime: [] };
+
+  function renderLeaderboardModalLists() {
+    renderRankedList(leaderboardModalRoundListEl, lastLeaderboardData.round, false);
+    renderRankedList(leaderboardModalAllTimeListEl, lastLeaderboardData.allTime, true);
+  }
+  function openLeaderboardModal() {
+    renderLeaderboardModalLists();
+    leaderboardOverlayEl.hidden = false;
+  }
+  function closeLeaderboardModal() {
+    leaderboardOverlayEl.hidden = true;
+  }
+  if (leaderboardModalCloseBtn) leaderboardModalCloseBtn.addEventListener("click", closeLeaderboardModal);
+  lbModalTabs.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      lbModalTabs.forEach(function (b) { b.classList.toggle("active", b === btn); });
+      var tab = btn.getAttribute("data-lb-tab");
+      leaderboardModalRoundListEl.hidden = tab !== "round";
+      leaderboardModalAllTimeListEl.hidden = tab !== "alltime";
+    });
+  });
 
   var MINI_LABELS = {
     idle: "Offline",
@@ -507,6 +593,9 @@
     renderBoard(state.board, state.givenMask);
     renderLeaderboard(state.leaderboard);
     renderAllTimeLeaderboard(state.allTimeLeaderboard);
+    lastLeaderboardData.round = state.leaderboard || [];
+    lastLeaderboardData.allTime = state.allTimeLeaderboard || [];
+    if (leaderboardOverlayEl && !leaderboardOverlayEl.hidden) renderLeaderboardModalLists();
     rawEventCountEl.textContent = String(state.rawEventCount);
     if (state.lastReceived) {
       lastReceivedEl.textContent = state.lastReceived.nickname + ": " + state.lastReceived.text;
@@ -525,6 +614,9 @@
     autoNextToggleEl.checked = !!state.autoNextRound;
     if (botAutoSolveToggleEl) botAutoSolveToggleEl.checked = !!state.botAutoSolveEnabled;
     syncDifficultySelects(state.lastDifficulty);
+    if (autoNextDelayInputEl && typeof state.autoNextDelaySeconds === "number" && document.activeElement !== autoNextDelayInputEl) {
+      autoNextDelayInputEl.value = state.autoNextDelaySeconds;
+    }
   });
 
   // ---- TikTok LIVE config - lets the host skip re-entering the Sign API
@@ -716,12 +808,81 @@
   document.getElementById("revealBoardTopBtn").addEventListener("click", triggerRevealBoard);
 
   // ---- Leaderboard top toolbar button --------------------------------------
-  // Opens the Leaderboard & Activity panel (same one behind the "Leaderboard
-  // & Activity" link below the board) and scrolls it into view.
-  document.getElementById("leaderboardTopBtn").addEventListener("click", function () {
-    setDetailsOpen(true);
-    detailsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+  // Opens the centrally located Leaderboards floating window (This Round /
+  // All-Time tabs), rather than just scrolling to the inline panel.
+  document.getElementById("leaderboardTopBtn").addEventListener("click", openLeaderboardModal);
+
+  // ---- Floating window timing controls -------------------------------------
+  var toastDurationInputEl = document.getElementById("toastDurationInput");
+  var roundWindowDurationInputEl = document.getElementById("roundWindowDurationInput");
+  var allTimeWindowDurationInputEl = document.getElementById("allTimeWindowDurationInput");
+  var autoNextDelayInputEl = document.getElementById("autoNextDelayInput");
+  var resetTimingBtnEl = document.getElementById("resetTimingBtn");
+
+  function applyTimingInputsFromPrefs() {
+    if (toastDurationInputEl) toastDurationInputEl.value = timingPrefs.toastSeconds;
+    if (roundWindowDurationInputEl) roundWindowDurationInputEl.value = timingPrefs.roundWindowSeconds;
+    if (allTimeWindowDurationInputEl) allTimeWindowDurationInputEl.value = timingPrefs.allTimeWindowSeconds;
+  }
+  applyTimingInputsFromPrefs();
+
+  function clampNumber(value, fallback, min, max) {
+    var n = parseFloat(value);
+    if (isNaN(n)) n = fallback;
+    if (n < min) n = min;
+    if (n > max) n = max;
+    return n;
+  }
+
+  if (toastDurationInputEl) {
+    toastDurationInputEl.addEventListener("change", function () {
+      var v = clampNumber(toastDurationInputEl.value, TIMING_DEFAULTS.toastSeconds, 1, 20);
+      toastDurationInputEl.value = v;
+      timingPrefs.toastSeconds = v;
+      TOAST_LIFETIME_MS = Math.round(v * 1000);
+      saveTimingPrefs(timingPrefs);
+    });
+  }
+  if (roundWindowDurationInputEl) {
+    roundWindowDurationInputEl.addEventListener("change", function () {
+      var v = clampNumber(roundWindowDurationInputEl.value, TIMING_DEFAULTS.roundWindowSeconds, 2, 60);
+      roundWindowDurationInputEl.value = v;
+      timingPrefs.roundWindowSeconds = v;
+      saveTimingPrefs(timingPrefs);
+    });
+  }
+  if (allTimeWindowDurationInputEl) {
+    allTimeWindowDurationInputEl.addEventListener("change", function () {
+      var v = clampNumber(allTimeWindowDurationInputEl.value, TIMING_DEFAULTS.allTimeWindowSeconds, 2, 60);
+      allTimeWindowDurationInputEl.value = v;
+      timingPrefs.allTimeWindowSeconds = v;
+      saveTimingPrefs(timingPrefs);
+    });
+  }
+  // The next-round delay is shared across every connected viewer, so it is
+  // sent to the server (which clamps, stores, and broadcasts it back) rather
+  // than only saved locally.
+  if (autoNextDelayInputEl) {
+    autoNextDelayInputEl.addEventListener("change", function () {
+      var v = clampNumber(autoNextDelayInputEl.value, TIMING_DEFAULTS.autoNextDelaySeconds, 3, 300);
+      autoNextDelayInputEl.value = v;
+      socket.emit("host:setAutoNextDelay", { seconds: v });
+    });
+  }
+  if (resetTimingBtnEl) {
+    resetTimingBtnEl.addEventListener("click", function () {
+      timingPrefs = {
+        toastSeconds: TIMING_DEFAULTS.toastSeconds,
+        roundWindowSeconds: TIMING_DEFAULTS.roundWindowSeconds,
+        allTimeWindowSeconds: TIMING_DEFAULTS.allTimeWindowSeconds
+      };
+      TOAST_LIFETIME_MS = Math.round(timingPrefs.toastSeconds * 1000);
+      saveTimingPrefs(timingPrefs);
+      applyTimingInputsFromPrefs();
+      if (autoNextDelayInputEl) autoNextDelayInputEl.value = TIMING_DEFAULTS.autoNextDelaySeconds;
+      socket.emit("host:setAutoNextDelay", { seconds: TIMING_DEFAULTS.autoNextDelaySeconds });
+    });
+  }
 
   // ---- Test mode: bot auto-solve ------------------------------------------
   var botAutoSolveToggleEl = document.getElementById("botAutoSolveToggle");

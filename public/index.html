@@ -98,6 +98,24 @@
         <button id="roundEndCloseBtn" class="icon-btn" aria-label="Close">&#10005;</button>
       </div>
       <ol id="roundEndList" class="round-end-list"></ol>
+      <div id="roundEndCountdown" class="round-end-countdown" hidden></div>
+    </div>
+  </div>
+
+  <!-- Leaderboard floating window: opened from the trophy button in the top
+       toolbar. Centrally located, with This Round / All-Time tabs. -->
+  <div id="leaderboardOverlay" class="round-end-overlay" hidden>
+    <div class="round-end-card">
+      <div class="round-end-head">
+        <h2>Leaderboards</h2>
+        <button id="leaderboardModalCloseBtn" class="icon-btn" aria-label="Close">&#10005;</button>
+      </div>
+      <div class="leaderboard-modal-tabs">
+        <button type="button" class="lb-modal-tab active" data-lb-tab="round">This Round</button>
+        <button type="button" class="lb-modal-tab" data-lb-tab="alltime">All-Time</button>
+      </div>
+      <ol id="leaderboardModalRoundList" class="round-end-list"></ol>
+      <ol id="leaderboardModalAllTimeList" class="round-end-list capped-20" hidden></ol>
     </div>
   </div>
 
@@ -188,6 +206,30 @@
           <small>Automatically starts a new puzzle a few seconds after each solve.</small>
         </span>
       </label>
+
+      <div class="timing-box">
+        <h3 class="hints-title">Floating Window Timing</h3>
+        <p class="hint">Customize how long each floating window stays on screen, and how long until the next round auto-starts. Saved on this device (the next-round delay is shared with all viewers).</p>
+        <div class="timing-grid">
+          <label class="timing-field">
+            Live guess toast (sec)
+            <input type="number" id="toastDurationInput" min="1" max="20" step="0.5">
+          </label>
+          <label class="timing-field">
+            Round scorers window (sec)
+            <input type="number" id="roundWindowDurationInput" min="2" max="60" step="1">
+          </label>
+          <label class="timing-field">
+            All-time window (sec)
+            <input type="number" id="allTimeWindowDurationInput" min="2" max="60" step="1">
+          </label>
+          <label class="timing-field">
+            Next round delay (sec)
+            <input type="number" id="autoNextDelayInput" min="3" max="300" step="1">
+          </label>
+        </div>
+        <button id="resetTimingBtn" type="button" class="btn btn-secondary timing-reset-btn">Reset to Defaults</button>
+      </div>
 
       <div class="puzzle-controls">
         <select id="difficultySelect">

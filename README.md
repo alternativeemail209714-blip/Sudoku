@@ -1,5 +1,32 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v1.8 changes:
+  - Floating Window Timing (in Settings, below Auto Next Round): lets you
+    customize exactly how long each floating window stays on screen -
+    the live guess toast, the "This Round's Top Scorers" window, and the
+    "All-Time Top Scorers" window - plus how many seconds until the next
+    round automatically starts. Each has its own sensible default, and a
+    "Reset to Defaults" button puts all four back at once. The toast and
+    round-end window durations are remembered on your device; the next-
+    round delay is shared with every viewer, since it controls the
+    actual game.
+  - A live countdown ("Next round starts in Ns...") now also appears
+    inside the round-end floating window itself, in addition to the
+    banner above the board, so it's easy to see exactly when the next
+    puzzle is about to begin.
+  - The Leaderboard button in the top toolbar now opens a centered
+    floating window with "This Round" / "All-Time" tabs, instead of just
+    scrolling down to the panel below the board.
+  - Gold/silver/bronze medals now show for 1st/2nd/3rd place everywhere
+    a leaderboard is shown - the round-end windows, the new Leaderboard
+    floating window, and the in-page leaderboard panels.
+  - Puzzle bank doubled: each difficulty now has 200 unique pre-generated
+    puzzles (1,400 total) instead of 100, so there's even more variety
+    before anything repeats.
+  - Folder layout fixed for deployment: index.html/style.css/game.js now
+    live in a "public" subfolder, matching how the server actually serves
+    them (this was a mismatch in the previous download).
+
 v1.7 changes:
   - Live guess toast area now reserves a fixed slot of space at all times,
     so the board no longer gets pushed up/down every time a toast appears

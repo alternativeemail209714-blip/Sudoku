@@ -119,7 +119,7 @@ var CLUE_COUNTS = {
   "extremely-hard": 20
 };
 var DEFAULT_DIFFICULTY = "moderate";
-var PUZZLES_PER_DIFFICULTY = 100;
+var PUZZLES_PER_DIFFICULTY = 200;
 var puzzleBank = {};
 var puzzleDrawQueue = {};
 
@@ -641,6 +641,7 @@ function setBotAutoSolveEnabled(enabled) {
 function broadcastState() {
   var publicState = game.getPublicState();
   publicState.botAutoSolveEnabled = botAutoSolveEnabled;
+  publicState.autoNextDelaySeconds = autoNextDelayMs / 1000;
   io.emit("state", publicState);
 }
 
@@ -660,7 +661,10 @@ function safe(fn) {
 // bank) starts automatically a short while after the current one is
 // solved, so a live show can keep rolling without the host touching
 // anything. It can be toggled on/off at any time from the settings drawer.
-var AUTO_NEXT_DELAY_MS = 10000; // time to show the round results before auto-starting
+var DEFAULT_AUTO_NEXT_DELAY_MS = 10000; // time to show the round results before auto-starting
+var MIN_AUTO_NEXT_DELAY_MS = 3000;
+var MAX_AUTO_NEXT_DELAY_MS = 300000;
+var autoNextDelayMs = DEFAULT_AUTO_NEXT_DELAY_MS; // host-configurable, see host:setAutoNextDelay
 var autoNextTimer = null;
 
 function cancelAutoNext() {
@@ -670,14 +674,21 @@ function cancelAutoNext() {
   }
 }
 
+function setAutoNextDelaySeconds(seconds) {
+  var ms = Math.round((typeof seconds === "number" && !isNaN(seconds) ? seconds : DEFAULT_AUTO_NEXT_DELAY_MS / 1000) * 1000);
+  if (ms < MIN_AUTO_NEXT_DELAY_MS) ms = MIN_AUTO_NEXT_DELAY_MS;
+  if (ms > MAX_AUTO_NEXT_DELAY_MS) ms = MAX_AUTO_NEXT_DELAY_MS;
+  autoNextDelayMs = ms;
+}
+
 function scheduleAutoNext() {
   cancelAutoNext();
-  io.emit("autoNextCountdown", { seconds: Math.round(AUTO_NEXT_DELAY_MS / 1000) });
+  io.emit("autoNextCountdown", { seconds: Math.round(autoNextDelayMs / 1000) });
   autoNextTimer = setTimeout(function () {
     autoNextTimer = null;
     game.reset(game.state.lastDifficulty);
     broadcastState();
-  }, AUTO_NEXT_DELAY_MS);
+  }, autoNextDelayMs);
 }
 
 // Shared by both viewer guesses and host reveals: whenever an action just
@@ -743,6 +754,7 @@ io.on("connection", function (socket) {
   console.log("[client connected]", socket.id);
   var initialState = game.getPublicState();
   initialState.botAutoSolveEnabled = botAutoSolveEnabled;
+  initialState.autoNextDelaySeconds = autoNextDelayMs / 1000;
   socket.emit("state", initialState);
   socket.emit("liveStatus", { state: "idle", message: "Not connected." });
   // Tell the client whether a Sign API Key / username are already
@@ -804,6 +816,16 @@ io.on("connection", function (socket) {
     var enabled = !!(payload && payload.enabled);
     game.setAutoNext(enabled);
     if (!enabled) cancelAutoNext();
+    broadcastState();
+  }));
+
+  // Lets the host customize how long (in seconds) the game waits after a
+  // puzzle is solved before automatically starting the next one, when
+  // Auto Next Round is on. Clamped to a sane range; broadcast to everyone
+  // so every connected screen's settings input stays in sync.
+  socket.on("host:setAutoNextDelay", safe(function (payload) {
+    var seconds = payload && typeof payload.seconds !== "undefined" ? parseFloat(payload.seconds) : NaN;
+    setAutoNextDelaySeconds(seconds);
     broadcastState();
   }));
 
