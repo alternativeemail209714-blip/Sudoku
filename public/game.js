@@ -26,8 +26,32 @@
   var feedListEl = document.getElementById("feedList");
   var solvedBannerEl = document.getElementById("solvedBanner");
   var liveStatusEl = document.getElementById("liveStatus");
+  var liveStatusMiniEl = document.getElementById("liveStatusMini");
 
   var currentMode = "offline";
+
+  // ---- Settings drawer open/close -----------------------------------------
+  var settingsOverlay = document.getElementById("settingsOverlay");
+  document.getElementById("settingsBtn").addEventListener("click", function () {
+    settingsOverlay.hidden = false;
+  });
+  document.getElementById("closeSettingsBtn").addEventListener("click", function () {
+    settingsOverlay.hidden = true;
+  });
+  document.getElementById("settingsBackdrop").addEventListener("click", function () {
+    settingsOverlay.hidden = true;
+  });
+
+  // ---- Leaderboard / diagnostics collapse ----------------------------------
+  var detailsToggle = document.getElementById("detailsToggle");
+  var detailsPanel = document.getElementById("detailsPanel");
+  detailsToggle.addEventListener("click", function () {
+    var isHidden = detailsPanel.hidden;
+    detailsPanel.hidden = !isHidden;
+    detailsToggle.innerHTML = isHidden
+      ? "&#9650; Hide Leaderboard &amp; Activity"
+      : "&#9660; Leaderboard &amp; Activity";
+  });
 
   // ---- Mode switching -------------------------------------------------------
   function showMode(mode) {
@@ -56,11 +80,9 @@
 
   function renderBoard(board, givenMask) {
     gridEl.innerHTML = "";
-    // corner blank cell
     var corner = document.createElement("div");
     corner.className = "grid-cell grid-label";
     gridEl.appendChild(corner);
-    // column headers 1-9
     for (var c = 0; c < 9; c++) {
       var colHead = document.createElement("div");
       colHead.className = "grid-cell grid-label";
@@ -115,6 +137,20 @@
     }
   }
 
+  var MINI_LABELS = {
+    idle: "Offline",
+    connecting: "Connecting...",
+    connected: "LIVE",
+    retrying: "Retrying...",
+    disconnected: "Offline",
+    error: "Error"
+  };
+
+  function updateLiveStatusMini(state) {
+    liveStatusMiniEl.className = "live-status-mini status-" + state;
+    liveStatusMiniEl.innerHTML = "&#9679; " + (MINI_LABELS[state] || state);
+  }
+
   // ---- Socket listeners ---------------------------------------------------
   socket.on("state", function (state) {
     renderBoard(state.board, state.givenMask);
@@ -137,9 +173,9 @@
   socket.on("guessResult", function (res) {
     var name = res.nickname || res.uniqueId || "viewer";
     if (res.status === "correct") {
-      addFeedItem(name + " solved " + res.coord + " = " + res.num + " (+10)", "feed-correct");
+      addFeedItem(name + " placed " + res.num + " at " + res.coord + " (+10)", "feed-correct");
     } else if (res.status === "wrong") {
-      addFeedItem(name + " tried " + res.coord + " = " + res.num + " (wrong)", "feed-wrong");
+      addFeedItem(name + " tried " + res.num + " at " + res.coord + " (wrong)", "feed-wrong");
     } else if (res.status === "given") {
       addFeedItem(name + " tried " + res.coord + " but it is a pre-filled clue", "feed-info");
     } else if (res.status === "already-solved") {
@@ -157,6 +193,7 @@
   socket.on("liveStatus", function (status) {
     liveStatusEl.textContent = status.message;
     liveStatusEl.className = "status-line status-" + status.state;
+    updateLiveStatusMini(status.state);
   });
 
   // ---- Live mode controls -------------------------------------------------
@@ -216,6 +253,7 @@
     var difficulty = document.getElementById("difficultySelect").value;
     socket.emit("host:newPuzzle", { difficulty: difficulty });
     solvedBannerEl.hidden = true;
+    settingsOverlay.hidden = true;
   });
 
 })();

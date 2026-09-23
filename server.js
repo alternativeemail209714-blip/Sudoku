@@ -93,13 +93,29 @@ function generatePuzzle(difficulty) {
 
 // ---------------------------------------------------------------------------
 // 2. CHAT PARSER - recognizes "A5 7" style algebraic-notation guesses.
-//    Also tolerant of "A5:7", "A5,7", "A5-7" and extra words around it.
+//    No "=" sign is required or shown anywhere. Also tolerant of "A5:7",
+//    "A5,7", "A5-7", "A5=7" (in case a viewer types it anyway), and even
+//    "A57" with no separator at all, since real audiences on mobile
+//    keyboards do not always type exactly what the instructions show.
+//    Full-width digits/letters (common on some phone keyboards, especially
+//    in Asia) are normalized to plain ASCII before matching.
 // ---------------------------------------------------------------------------
-var CELL_GUESS_REGEX = /\b([A-I])\s*[-:,]?\s*([1-9])[\s,:\-]+([1-9])\b/i;
+var CELL_GUESS_REGEX = /\b([A-I])\s*[-:,=]?\s*([1-9])[\s,:=\-]+([1-9])\b/i;
+var CELL_GUESS_COMPACT_REGEX = /\b([A-I])([1-9])([1-9])\b/i;
+
+function normalizeGuessText(text) {
+  return text
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[\uFF10-\uFF19]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30); })
+    .replace(/[\uFF21-\uFF3A]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFF21 + 0x41); })
+    .replace(/[\uFF41-\uFF5A]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFF41 + 0x61); });
+}
 
 function parseGuess(text) {
   if (!text || typeof text !== "string") return null;
-  var match = text.match(CELL_GUESS_REGEX);
+  var cleaned = normalizeGuessText(text);
+  var match = cleaned.match(CELL_GUESS_REGEX);
+  if (!match) match = cleaned.match(CELL_GUESS_COMPACT_REGEX);
   if (!match) return null;
   var rowLetter = match[1].toUpperCase();
   var col = parseInt(match[2], 10);

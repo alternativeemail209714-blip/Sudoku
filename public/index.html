@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>TikTok Sudoku LIVE</title>
 <link rel="stylesheet" href="/style.css">
 </head>
@@ -11,69 +11,24 @@
 
   <header class="top-bar">
     <h1>TikTok Sudoku <span class="accent">LIVE</span></h1>
-    <div class="mode-tabs">
-      <button class="mode-btn active" data-mode="offline">Offline</button>
-      <button class="mode-btn" data-mode="test">Test</button>
-      <button class="mode-btn" data-mode="live">Live</button>
-    </div>
+    <button id="settingsBtn" class="icon-btn" aria-label="Settings">&#9881;</button>
   </header>
 
-  <section class="legend-box">
-    <strong>How To Play:</strong> Type your answer as <span class="mono">COORDINATE + NUMBER</span>.
-    Example: <span class="mono highlight">A5 7</span> puts a <b>7</b> in <b>Row A, Column 5</b>.
-    Rows are letters A-I (top to bottom). Columns are numbers 1-9 (left to right).
-  </section>
+  <div class="quick-hint">
+    Chat format: <span class="mono highlight">A5 7</span> puts <b>7</b> in <b>Row A, Column 5</b>
+  </div>
 
-  <section class="panel live-panel" data-panel="live" hidden>
-    <h2>Live Mode (TikTok LIVE)</h2>
-    <p class="hint">Requires a free Sign API Key from eulerstream.com. This step is mandatory - Live Mode will not connect without it.</p>
-    <div class="field-row">
-      <input id="tiktokUsername" type="text" placeholder="TikTok username (no @)" autocomplete="off">
-      <input id="signApiKey" type="password" placeholder="EulerStream Sign API Key" autocomplete="off">
-    </div>
-    <div class="field-row">
-      <button id="connectLiveBtn" class="btn btn-primary">Connect to TikTok LIVE</button>
-      <button id="disconnectLiveBtn" class="btn btn-danger">Disconnect</button>
-    </div>
-    <div id="liveStatus" class="status-line status-idle">Not connected.</div>
-  </section>
-
-  <section class="panel test-panel" data-panel="test" hidden>
-    <h2>Test Mode</h2>
-    <p class="hint">No login needed. Use this to try the game before going live.</p>
-    <div class="field-row">
-      <button id="simulateBtn" class="btn btn-primary">Simulate Random Fake Chat</button>
-    </div>
-    <div class="field-row">
-      <input id="testCustomText" type="text" placeholder="Or type a fake comment, e.g. A5 7">
-      <button id="testCustomBtn" class="btn btn-secondary">Send As Fake Viewer</button>
-    </div>
-  </section>
-
-  <section class="panel offline-panel" data-panel="offline">
-    <h2>Offline Mode (Solo Play)</h2>
-    <p class="hint">Play the board yourself. Enter answers below.</p>
-    <div class="field-row">
-      <input id="offlineGuessInput" type="text" placeholder="Your guess, e.g. A5 7" autocomplete="off">
-      <button id="offlineGuessBtn" class="btn btn-primary">Submit</button>
-    </div>
-  </section>
-
-  <section class="board-and-side">
-    <div class="board-wrap">
-      <div class="puzzle-controls">
-        <select id="difficultySelect">
-          <option value="easy">Easy</option>
-          <option value="medium" selected>Medium</option>
-          <option value="hard">Hard</option>
-        </select>
-        <button id="newPuzzleBtn" class="btn btn-secondary">New Puzzle</button>
-        <span id="solvedBanner" class="solved-banner" hidden>SOLVED! Great job, chat!</span>
-      </div>
-      <div id="sudokuGrid" class="sudoku-grid"></div>
+  <main class="board-stage">
+    <div class="puzzle-topline">
+      <span id="liveStatusMini" class="live-status-mini status-idle">&#9679; Offline</span>
+      <span id="solvedBanner" class="solved-banner" hidden>SOLVED!</span>
     </div>
 
-    <aside class="side-panel">
+    <div id="sudokuGrid" class="sudoku-grid"></div>
+
+    <button id="detailsToggle" class="details-toggle" type="button">&#9660; Leaderboard &amp; Activity</button>
+
+    <div id="detailsPanel" class="details-panel" hidden>
       <div class="diagnostics-box">
         <h3>Diagnostics</h3>
         <div>All Raw Events: <span id="rawEventCount">0</span></div>
@@ -89,13 +44,83 @@
         <h3>Recent Answers</h3>
         <ul id="feedList"></ul>
       </div>
-    </aside>
-  </section>
+    </div>
+  </main>
 
   <footer class="host-console-bar">
-    <input id="hostConsoleInput" type="text" placeholder="Host console: type a comment or override, e.g. A5 7" autocomplete="off">
+    <input id="hostConsoleInput" type="text" placeholder="Host console: A5 7" autocomplete="off">
     <button id="hostConsoleBtn" class="btn btn-primary">Send</button>
   </footer>
+
+  <!-- Settings drawer: mode switching, TikTok connect, test tools, new puzzle -->
+  <div id="settingsOverlay" class="settings-overlay" hidden>
+    <div class="settings-backdrop" id="settingsBackdrop"></div>
+    <div class="settings-drawer">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button id="closeSettingsBtn" class="icon-btn" aria-label="Close">&#10005;</button>
+      </div>
+
+      <div class="mode-tabs">
+        <button class="mode-btn active" data-mode="offline">Offline</button>
+        <button class="mode-btn" data-mode="test">Test</button>
+        <button class="mode-btn" data-mode="live">Live</button>
+      </div>
+
+      <section class="panel live-panel" data-panel="live" hidden>
+        <h2>Live Mode (TikTok LIVE)</h2>
+        <p class="hint">Requires a free Sign API Key from eulerstream.com. Live Mode will not connect without it.</p>
+        <div class="field-row">
+          <input id="tiktokUsername" type="text" placeholder="TikTok username (no @)" autocomplete="off">
+          <input id="signApiKey" type="password" placeholder="EulerStream Sign API Key" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <button id="connectLiveBtn" class="btn btn-primary">Connect to TikTok LIVE</button>
+          <button id="disconnectLiveBtn" class="btn btn-danger">Disconnect</button>
+        </div>
+        <div id="liveStatus" class="status-line status-idle">Not connected.</div>
+      </section>
+
+      <section class="panel test-panel" data-panel="test" hidden>
+        <h2>Test Mode</h2>
+        <p class="hint">No login needed. Use this to try the game before going live.</p>
+        <div class="field-row">
+          <button id="simulateBtn" class="btn btn-primary">Simulate Random Fake Chat</button>
+        </div>
+        <div class="field-row">
+          <input id="testCustomText" type="text" placeholder="Or type a fake comment, e.g. A5 7">
+          <button id="testCustomBtn" class="btn btn-secondary">Send As Fake Viewer</button>
+        </div>
+      </section>
+
+      <section class="panel offline-panel" data-panel="offline">
+        <h2>Offline Mode (Solo Play)</h2>
+        <p class="hint">Play the board yourself. Enter answers below.</p>
+        <div class="field-row">
+          <input id="offlineGuessInput" type="text" placeholder="Your guess, e.g. A5 7" autocomplete="off">
+          <button id="offlineGuessBtn" class="btn btn-primary">Submit</button>
+        </div>
+      </section>
+
+      <div class="settings-divider"></div>
+
+      <div class="puzzle-controls">
+        <select id="difficultySelect">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <button id="newPuzzleBtn" class="btn btn-secondary">New Puzzle</button>
+      </div>
+
+      <div class="legend-box-full">
+        <strong>How To Play:</strong> Type your answer as COORDINATE + NUMBER, e.g.
+        <span class="mono highlight">A5 7</span> puts a 7 in Row A, Column 5.
+        Rows are letters A-I (top to bottom). Columns are numbers 1-9 (left to right).
+        No punctuation needed - just a coordinate, a space, and a number.
+      </div>
+    </div>
+  </div>
 
 </div>
 
