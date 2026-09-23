@@ -92,6 +92,54 @@ function generatePuzzle(difficulty) {
 }
 
 // ---------------------------------------------------------------------------
+// 1b. PUZZLE BANK - pre-generates a large pool of puzzles for each difficulty
+//     (at least 100 apiece) at server startup, so hitting "New Puzzle" during
+//     a live show is instant and the audience sees a lot of variety instead
+//     of the same few boards. Puzzles are drawn from a shuffled queue that is
+//     reshuffled once the whole bank has been used, so every puzzle in the
+//     bank is seen once before any repeats.
+// ---------------------------------------------------------------------------
+var DIFFICULTIES = ["easy", "medium", "hard"];
+var PUZZLES_PER_DIFFICULTY = 100;
+var puzzleBank = { easy: [], medium: [], hard: [] };
+var puzzleDrawQueue = { easy: [], medium: [], hard: [] };
+
+function buildPuzzleBank() {
+  var startedAt = Date.now();
+  DIFFICULTIES.forEach(function (difficulty) {
+    var list = [];
+    for (var i = 0; i < PUZZLES_PER_DIFFICULTY; i++) {
+      list.push(generatePuzzle(difficulty));
+    }
+    puzzleBank[difficulty] = list;
+  });
+  console.log(
+    "[puzzle bank] generated " + PUZZLES_PER_DIFFICULTY + " puzzles each for " +
+    DIFFICULTIES.join(", ") + " in " + (Date.now() - startedAt) + "ms"
+  );
+}
+buildPuzzleBank();
+
+function shuffledIndices(count) {
+  var arr = [];
+  for (var i = 0; i < count; i++) arr.push(i);
+  for (var j = arr.length - 1; j > 0; j--) {
+    var k = Math.floor(Math.random() * (j + 1));
+    var tmp = arr[j]; arr[j] = arr[k]; arr[k] = tmp;
+  }
+  return arr;
+}
+
+function drawPuzzle(difficulty) {
+  if (!puzzleBank[difficulty] || puzzleBank[difficulty].length === 0) difficulty = "medium";
+  if (!puzzleDrawQueue[difficulty] || puzzleDrawQueue[difficulty].length === 0) {
+    puzzleDrawQueue[difficulty] = shuffledIndices(puzzleBank[difficulty].length);
+  }
+  var idx = puzzleDrawQueue[difficulty].pop();
+  return puzzleBank[difficulty][idx];
+}
+
+// ---------------------------------------------------------------------------
 // 2. CHAT PARSER - recognizes "A5 7" style algebraic-notation guesses.
 //    No "=" sign is required or shown anywhere. Also tolerant of "A5:7",
 //    "A5,7", "A5-7", "A5=7" (in case a viewer types it anyway), and even
@@ -142,13 +190,20 @@ function createGameState() {
     board: null,
     givenMask: null,
     solved: false,
-    scores: {},
+    scores: {},           // this round only - reset every new puzzle
+    allTimeScores: {},    // persists across every puzzle for the life of the server
     rawEventCount: 0,
-    lastReceived: null
+    lastReceived: null,
+    lastDifficulty: "medium",
+    autoNextRound: false, // when true, a new puzzle starts automatically after each solve
+    roundStartTime: Date.now(), // used to show elapsed solve time - there is NO time limit
+    solveTimeMs: null
   };
 
   function reset(difficulty) {
-    var built = generatePuzzle(difficulty || "medium");
+    difficulty = difficulty || state.lastDifficulty || "medium";
+    state.lastDifficulty = difficulty;
+    var built = drawPuzzle(difficulty);
     state.puzzle = built.puzzle;
     state.solution = built.solution;
     state.board = built.puzzle.map(function (row) { return row.slice(); });
@@ -157,14 +212,25 @@ function createGameState() {
     });
     state.solved = false;
     state.scores = {};
+    state.roundStartTime = Date.now();
+    state.solveTimeMs = null;
   }
   reset("medium");
+
+  function setAutoNext(enabled) {
+    state.autoNextRound = !!enabled;
+  }
 
   function ensurePlayer(uniqueId, displayName) {
     if (!state.scores[uniqueId]) {
       state.scores[uniqueId] = { name: displayName || uniqueId, correct: 0, wrong: 0, points: 0 };
     } else if (displayName) {
       state.scores[uniqueId].name = displayName;
+    }
+    if (!state.allTimeScores[uniqueId]) {
+      state.allTimeScores[uniqueId] = { name: displayName || uniqueId, correct: 0, wrong: 0, points: 0 };
+    } else if (displayName) {
+      state.allTimeScores[uniqueId].name = displayName;
     }
   }
 
@@ -188,19 +254,28 @@ function createGameState() {
     var correct = state.solution[row][col] === num;
     if (correct) {
       state.board[row][col] = num;
+      // 1 point per correct guess - both for this round and the all-time total.
       state.scores[uniqueId].correct += 1;
-      state.scores[uniqueId].points += 10;
+      state.scores[uniqueId].points += 1;
+      state.allTimeScores[uniqueId].correct += 1;
+      state.allTimeScores[uniqueId].points += 1;
       var solvedNow = checkSolved();
-      if (solvedNow) state.solved = true;
+      if (solvedNow) {
+        state.solved = true;
+        // No time limit in this game - we only record how long it took to
+        // solve, purely for information/bragging rights.
+        state.solveTimeMs = Date.now() - state.roundStartTime;
+      }
       return { status: "correct", coord: coordLabel(row, col), num: num, solved: solvedNow };
     }
     state.scores[uniqueId].wrong += 1;
+    state.allTimeScores[uniqueId].wrong += 1;
     return { status: "wrong", coord: coordLabel(row, col), num: num };
   }
 
-  function getLeaderboard(limit) {
-    var entries = Object.keys(state.scores).map(function (id) {
-      var s = state.scores[id];
+  function buildLeaderboard(scoresObj, limit) {
+    var entries = Object.keys(scoresObj).map(function (id) {
+      var s = scoresObj[id];
       return { uniqueId: id, name: s.name, correct: s.correct, wrong: s.wrong, points: s.points };
     });
     entries.sort(function (a, b) {
@@ -208,6 +283,14 @@ function createGameState() {
       return b.correct - a.correct;
     });
     return entries.slice(0, limit || 10);
+  }
+
+  function getLeaderboard(limit) {
+    return buildLeaderboard(state.scores, limit);
+  }
+
+  function getAllTimeLeaderboard(limit) {
+    return buildLeaderboard(state.allTimeScores, limit);
   }
 
   function getPublicState() {
@@ -218,7 +301,12 @@ function createGameState() {
       solved: state.solved,
       rawEventCount: state.rawEventCount,
       lastReceived: state.lastReceived,
-      leaderboard: getLeaderboard(10)
+      leaderboard: getLeaderboard(10),
+      allTimeLeaderboard: getAllTimeLeaderboard(10),
+      autoNextRound: state.autoNextRound,
+      lastDifficulty: state.lastDifficulty,
+      roundStartTime: state.roundStartTime,
+      solveTimeMs: state.solveTimeMs
     };
   }
 
@@ -226,7 +314,9 @@ function createGameState() {
     state: state,
     reset: reset,
     applyGuess: applyGuess,
+    setAutoNext: setAutoNext,
     getLeaderboard: getLeaderboard,
+    getAllTimeLeaderboard: getAllTimeLeaderboard,
     getPublicState: getPublicState
   };
 }
@@ -385,6 +475,31 @@ function safe(fn) {
   };
 }
 
+// ---- Auto Next Round --------------------------------------------------
+// When enabled, a fresh puzzle (same difficulty, drawn from the puzzle
+// bank) starts automatically a short while after the current one is
+// solved, so a live show can keep rolling without the host touching
+// anything. It can be toggled on/off at any time from the settings drawer.
+var AUTO_NEXT_DELAY_MS = 10000; // time to show the round results before auto-starting
+var autoNextTimer = null;
+
+function cancelAutoNext() {
+  if (autoNextTimer) {
+    clearTimeout(autoNextTimer);
+    autoNextTimer = null;
+  }
+}
+
+function scheduleAutoNext() {
+  cancelAutoNext();
+  io.emit("autoNextCountdown", { seconds: Math.round(AUTO_NEXT_DELAY_MS / 1000) });
+  autoNextTimer = setTimeout(function () {
+    autoNextTimer = null;
+    game.reset(game.state.lastDifficulty);
+    broadcastState();
+  }, AUTO_NEXT_DELAY_MS);
+}
+
 function processComment(text, uniqueId, nickname, source) {
   game.state.rawEventCount += 1;
   game.state.lastReceived = { uniqueId: uniqueId, nickname: nickname, text: text, source: source, at: Date.now() };
@@ -407,7 +522,12 @@ function processComment(text, uniqueId, nickname, source) {
   });
   broadcastState();
   if (result.status === "correct" && result.solved) {
-    io.emit("puzzleSolved", { leaderboard: game.getLeaderboard(10) });
+    io.emit("puzzleSolved", {
+      leaderboard: game.getLeaderboard(10),
+      allTimeLeaderboard: game.getAllTimeLeaderboard(10),
+      solveTimeMs: game.state.solveTimeMs
+    });
+    if (game.state.autoNextRound) scheduleAutoNext();
   }
 }
 
@@ -446,8 +566,16 @@ io.on("connection", function (socket) {
   }));
 
   socket.on("host:newPuzzle", safe(function (payload) {
-    var difficulty = payload && payload.difficulty ? payload.difficulty : "medium";
+    var difficulty = payload && payload.difficulty ? payload.difficulty : game.state.lastDifficulty;
+    cancelAutoNext();
     game.reset(difficulty);
+    broadcastState();
+  }));
+
+  socket.on("host:setAutoNext", safe(function (payload) {
+    var enabled = !!(payload && payload.enabled);
+    game.setAutoNext(enabled);
+    if (!enabled) cancelAutoNext();
     broadcastState();
   }));
 

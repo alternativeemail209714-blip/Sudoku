@@ -21,8 +21,10 @@
   <main class="board-stage">
     <div class="puzzle-topline">
       <span id="liveStatusMini" class="live-status-mini status-idle">&#9679; Offline</span>
+      <span id="stopwatch" class="stopwatch" title="Time elapsed - there is no time limit">&#9201; 00:00</span>
       <span id="solvedBanner" class="solved-banner" hidden>SOLVED!</span>
     </div>
+    <div id="autoNextCountdown" class="auto-next-countdown" hidden></div>
 
     <div id="sudokuGrid" class="sudoku-grid"></div>
 
@@ -36,8 +38,13 @@
       </div>
 
       <div class="leaderboard-box">
-        <h3>Top 10 Leaderboard</h3>
+        <h3>This Round (1 pt / correct)</h3>
         <ol id="leaderboardList"></ol>
+      </div>
+
+      <div class="leaderboard-box">
+        <h3>All-Time Leaderboard</h3>
+        <ol id="allTimeLeaderboardList"></ol>
       </div>
 
       <div class="feed-box">
@@ -104,6 +111,15 @@
 
       <div class="settings-divider"></div>
 
+      <label class="auto-next-toggle">
+        <input type="checkbox" id="autoNextToggle">
+        <span class="toggle-switch" aria-hidden="true"></span>
+        <span class="toggle-label">
+          Auto Next Round
+          <small>Automatically starts a new puzzle a few seconds after each solve.</small>
+        </span>
+      </label>
+
       <div class="puzzle-controls">
         <select id="difficultySelect">
           <option value="easy">Easy</option>
@@ -118,6 +134,8 @@
         <span class="mono highlight">A5 7</span> puts a 7 in Row A, Column 5.
         Rows are letters A-I (top to bottom). Columns are numbers 1-9 (left to right).
         No punctuation needed - just a coordinate, a space, and a number.
+        Each correct guess earns <b>1 point</b>. There is no time limit - the clock
+        just shows how long each puzzle takes to solve.
       </div>
     </div>
   </div>

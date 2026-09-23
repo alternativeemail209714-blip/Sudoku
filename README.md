@@ -14,6 +14,24 @@ To run it on your own computer first (recommended before deploying):
   3. Run: npm start
   4. Open http://localhost:3000 in your browser.
 
+v1.2 changes:
+  - Auto Next Round: a toggle in Settings that, when on, automatically starts
+    a new puzzle (same difficulty) about 10 seconds after the current one is
+    solved, so a live show can keep rolling hands-free. Turn it off anytime
+    to go back to manually clicking "New Puzzle".
+  - Big puzzle bank: at least 100 unique puzzles are pre-generated for each
+    difficulty (Easy / Medium / Hard) when the server starts, so "New
+    Puzzle" is instant and the audience sees a lot of variety before any
+    puzzle repeats.
+  - No time limit: the game never cuts a round short. A small stopwatch on
+    the board just counts up so everyone can see how long the puzzle has
+    taken, and freezes on the exact solve time once it's finished - it's
+    purely informational.
+  - Scoring simplified to 1 point per correct guess. Each round shows "This
+    Round" scores, and there is now a persistent "All-Time Leaderboard"
+    that keeps a running total across every puzzle for as long as the
+    server has been running.
+
 v1.1 changes:
   - Chat parser is more forgiving: "A5 7", "A5,7", "A5:7", "A5-7" and even
     "A57" (no separator at all) are all accepted. Full-width digits/letters

@@ -27,8 +27,60 @@
   var solvedBannerEl = document.getElementById("solvedBanner");
   var liveStatusEl = document.getElementById("liveStatus");
   var liveStatusMiniEl = document.getElementById("liveStatusMini");
+  var stopwatchEl = document.getElementById("stopwatch");
+  var autoNextCountdownEl = document.getElementById("autoNextCountdown");
+  var autoNextToggleEl = document.getElementById("autoNextToggle");
+  var allTimeLeaderboardListEl = document.getElementById("allTimeLeaderboardList");
 
   var currentMode = "offline";
+
+  // ---- Stopwatch (informational only - there is NO time limit) ------------
+  // The clock just tells everyone how long the current puzzle has taken so
+  // far. Once solved, it freezes on the server-reported solve time.
+  var roundStartTime = null;
+  var roundIsSolved = false;
+  var roundSolveTimeMs = null;
+
+  function formatDuration(ms) {
+    if (ms == null || ms < 0 || isNaN(ms)) ms = 0;
+    var totalSeconds = Math.floor(ms / 1000);
+    var m = Math.floor(totalSeconds / 60);
+    var s = totalSeconds % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function tickStopwatch() {
+    if (!roundStartTime) return;
+    var elapsed = (roundIsSolved && roundSolveTimeMs != null)
+      ? roundSolveTimeMs
+      : (Date.now() - roundStartTime);
+    stopwatchEl.innerHTML = "&#9201; " + formatDuration(elapsed);
+  }
+  setInterval(tickStopwatch, 500);
+
+  // ---- Auto Next Round countdown banner ------------------------------------
+  var autoNextCountdownTimer = null;
+  function clearAutoNextCountdown() {
+    if (autoNextCountdownTimer) {
+      clearInterval(autoNextCountdownTimer);
+      autoNextCountdownTimer = null;
+    }
+    autoNextCountdownEl.hidden = true;
+  }
+  function startAutoNextCountdown(seconds) {
+    var remaining = Math.max(0, Math.round(seconds));
+    clearAutoNextCountdown();
+    autoNextCountdownEl.hidden = false;
+    autoNextCountdownEl.textContent = "Next puzzle starts in " + remaining + "s...";
+    autoNextCountdownTimer = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearAutoNextCountdown();
+        return;
+      }
+      autoNextCountdownEl.textContent = "Next puzzle starts in " + remaining + "s...";
+    }, 1000);
+  }
 
   // ---- Settings drawer open/close -----------------------------------------
   // NOTE: we set element.style.display directly (an inline style) rather than
@@ -131,10 +183,19 @@
 
   function renderLeaderboard(list) {
     leaderboardListEl.innerHTML = "";
-    list.forEach(function (entry) {
+    (list || []).forEach(function (entry) {
       var li = document.createElement("li");
-      li.textContent = entry.name + " - " + entry.points + " pts (" + entry.correct + " correct)";
+      li.textContent = entry.name + " - " + entry.points + " pt" + (entry.points === 1 ? "" : "s");
       leaderboardListEl.appendChild(li);
+    });
+  }
+
+  function renderAllTimeLeaderboard(list) {
+    allTimeLeaderboardListEl.innerHTML = "";
+    (list || []).forEach(function (entry) {
+      var li = document.createElement("li");
+      li.textContent = entry.name + " - " + entry.points + " pt" + (entry.points === 1 ? "" : "s");
+      allTimeLeaderboardListEl.appendChild(li);
     });
   }
 
@@ -166,12 +227,23 @@
   socket.on("state", function (state) {
     renderBoard(state.board, state.givenMask);
     renderLeaderboard(state.leaderboard);
+    renderAllTimeLeaderboard(state.allTimeLeaderboard);
     rawEventCountEl.textContent = String(state.rawEventCount);
     if (state.lastReceived) {
       lastReceivedEl.textContent = state.lastReceived.nickname + ": " + state.lastReceived.text;
     }
     solvedBannerEl.hidden = !state.solved;
     showMode(state.mode);
+
+    // Stopwatch: reflects the server's round start time. No time limit -
+    // this is purely informational (and freezes at solve time once solved).
+    roundStartTime = state.roundStartTime || null;
+    roundIsSolved = !!state.solved;
+    roundSolveTimeMs = (typeof state.solveTimeMs === "number") ? state.solveTimeMs : null;
+    tickStopwatch();
+    if (!state.solved) clearAutoNextCountdown();
+
+    autoNextToggleEl.checked = !!state.autoNextRound;
   });
 
   socket.on("diagnostics", function (diag) {
@@ -184,7 +256,7 @@
   socket.on("guessResult", function (res) {
     var name = res.nickname || res.uniqueId || "viewer";
     if (res.status === "correct") {
-      addFeedItem(name + " placed " + res.num + " at " + res.coord + " (+10)", "feed-correct");
+      addFeedItem(name + " placed " + res.num + " at " + res.coord + " (+1)", "feed-correct");
     } else if (res.status === "wrong") {
       addFeedItem(name + " tried " + res.num + " at " + res.coord + " (wrong)", "feed-wrong");
     } else if (res.status === "given") {
@@ -196,9 +268,21 @@
     }
   });
 
-  socket.on("puzzleSolved", function () {
+  socket.on("puzzleSolved", function (data) {
+    data = data || {};
+    var timeText = (typeof data.solveTimeMs === "number") ? " in " + formatDuration(data.solveTimeMs) : "";
     solvedBannerEl.hidden = false;
-    addFeedItem("PUZZLE SOLVED by the audience!", "feed-correct");
+    solvedBannerEl.textContent = "SOLVED" + timeText + "!";
+    addFeedItem("PUZZLE SOLVED by the audience" + timeText + "!", "feed-correct");
+    if (data.leaderboard) renderLeaderboard(data.leaderboard);
+    if (data.allTimeLeaderboard) renderAllTimeLeaderboard(data.allTimeLeaderboard);
+    roundIsSolved = true;
+    if (typeof data.solveTimeMs === "number") roundSolveTimeMs = data.solveTimeMs;
+    tickStopwatch();
+  });
+
+  socket.on("autoNextCountdown", function (data) {
+    startAutoNextCountdown(data && data.seconds ? data.seconds : 10);
   });
 
   socket.on("liveStatus", function (status) {
@@ -259,11 +343,18 @@
     if (e.key === "Enter") submitHostConsole();
   });
 
+  // ---- Auto Next Round toggle -------------------------------------------
+  autoNextToggleEl.addEventListener("change", function () {
+    socket.emit("host:setAutoNext", { enabled: autoNextToggleEl.checked });
+    if (!autoNextToggleEl.checked) clearAutoNextCountdown();
+  });
+
   // ---- New puzzle controls ---------------------------------------------------
   document.getElementById("newPuzzleBtn").addEventListener("click", function () {
     var difficulty = document.getElementById("difficultySelect").value;
     socket.emit("host:newPuzzle", { difficulty: difficulty });
     solvedBannerEl.hidden = true;
+    clearAutoNextCountdown();
     closeSettings();
   });
 
