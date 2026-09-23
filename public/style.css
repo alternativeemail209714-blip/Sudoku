@@ -740,6 +740,7 @@ html, body {
   font-size: 13px;
   line-height: 1.5;
 }
+.legend-box-full + .legend-box-full { margin-top: 10px; }
 .how-to-play-title {
   display: block;
   margin-bottom: 8px;
