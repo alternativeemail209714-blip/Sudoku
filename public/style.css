@@ -1,15 +1,70 @@
+/* =====================================================================
+   COLOR SYSTEM
+   Default is a softened dark theme: less pure-black background, less
+   saturated neon accents, and text colors chosen for solid contrast
+   ratios (WCAG AA, ~4.5:1+ for body text) so it's comfortable to look
+   at for long stretches (e.g. a multi-hour stream). A light theme is
+   also provided and can be toggled from Settings, or will be picked up
+   automatically from the viewer's OS/browser preference if they never
+   choose one manually.
+   ========================================================================= */
 :root {
-  --bg: #0e0e17;
-  --bg-panel: #17172a;
-  --pink: #fe2c55;
-  --cyan: #25f4ee;
-  --text: #f2f2f7;
-  --text-dim: #9a9ab0;
-  --given: #2b2b45;
-  --correct: #1c6e4a;
-  --border: #33334f;
+  --bg: #161a23;
+  --bg-panel: #1f2430;
+  --bg-input: #12151d;
+  --pink: #ec5f74;      /* brand accent - softened from neon */
+  --cyan: #4fd1c5;      /* secondary accent - soft teal, not neon */
+  --text: #eef0f6;
+  --text-dim: #a7acc2;
+  --given: #262b3a;
+  --correct: #277a53;
+  --success: #4ade80;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --border: #323849;
+  --legend-bg: rgba(79, 209, 197, 0.10);
   --vh: 1vh;
+  --host-console-offset: 66px;
 }
+
+/* Light theme: applied when the viewer's system prefers light AND they
+   haven't picked a theme manually ... */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f5f9;
+    --bg-panel: #ffffff;
+    --bg-input: #eef0f5;
+    --pink: #d63a56;
+    --cyan: #0c766c;
+    --text: #1c2030;
+    --text-dim: #5b6178;
+    --given: #e7e9f1;
+    --correct: #1f7a4f;
+    --success: #16803d;
+    --danger: #d33a3a;
+    --warning: #b45309;
+    --border: #dcdfe8;
+    --legend-bg: rgba(15, 138, 126, 0.08);
+  }
+}
+/* ... or when they explicitly pick "Light" from Settings, which always wins. */
+:root[data-theme="light"] {
+  --bg: #f4f5f9;
+  --bg-panel: #ffffff;
+  --bg-input: #eef0f5;
+  --pink: #d63a56;
+  --cyan: #0c766c;
+  --text: #1c2030;
+  --text-dim: #5b6178;
+  --given: #e7e9f1;
+  --correct: #1f7a4f;
+  --success: #16803d;
+  --danger: #d33a3a;
+  --warning: #b45309;
+  --border: #dcdfe8;
+  --legend-bg: rgba(15, 138, 126, 0.08);
+}
+
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
@@ -22,7 +77,8 @@ html, body {
   min-height: calc(var(--vh) * 100);
   display: flex;
   flex-direction: column;
-  padding-bottom: 66px;
+  padding-bottom: var(--host-console-offset, 66px);
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .top-bar {
   position: sticky;
@@ -92,11 +148,11 @@ html, body {
 }
 .live-status-mini { font-size: 12px; font-weight: 600; }
 .live-status-mini.status-idle, .live-status-mini.status-disconnected { color: var(--text-dim); }
-.live-status-mini.status-connecting, .live-status-mini.status-retrying { color: #f5c542; }
-.live-status-mini.status-connected { color: #3ddc84; }
-.live-status-mini.status-error { color: var(--pink); }
+.live-status-mini.status-connecting, .live-status-mini.status-retrying { color: var(--warning); }
+.live-status-mini.status-connected { color: var(--success); }
+.live-status-mini.status-error { color: var(--danger); }
 .solved-banner {
-  background: #1c6e4a;
+  background: var(--correct);
   color: #fff;
   padding: 4px 10px;
   border-radius: 20px;
@@ -117,7 +173,7 @@ html, body {
   overflow: hidden;
 }
 .grid-cell {
-  background: #0c0c16;
+  background: var(--bg-input);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -165,27 +221,65 @@ html, body {
 .diagnostics-box h3, .leaderboard-box h3, .feed-box h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--cyan); }
 #leaderboardList { margin: 0; padding-left: 18px; }
 #leaderboardList li { margin-bottom: 4px; }
+#allTimeLeaderboardList { margin: 0; padding-left: 18px; }
+#allTimeLeaderboardList li { margin-bottom: 4px; }
 #feedList { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 #feedList li { padding: 3px 0; border-bottom: 1px solid var(--border); }
-.feed-correct { color: #3ddc84; }
-.feed-wrong { color: var(--pink); }
+.feed-correct { color: var(--success); }
+.feed-wrong { color: var(--danger); }
 .feed-info { color: var(--text-dim); }
+
+/* ---- Host console bar (collapsible) ---------------------------------
+   The host console can be collapsed down to a slim strip to free up
+   screen space (handy on a phone, or once the host is done typing
+   answers manually). Its expanded/collapsed state is remembered on this
+   device. */
 .host-console-bar {
   position: sticky;
   bottom: 0;
   z-index: 30;
   display: flex;
-  gap: 8px;
-  padding: 10px 14px;
+  flex-direction: column;
+  padding: 6px 14px 10px 14px;
   background: var(--bg-panel);
   border-top: 1px solid var(--border);
 }
+.host-console-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+}
+.host-console-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.host-console-toggle {
+  background: transparent;
+  border: none;
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.host-console-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.host-console-bar.collapsed .host-console-row { display: none; }
+.host-console-bar.collapsed { padding-bottom: 6px; }
 .host-console-bar input {
   flex: 1;
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: #0c0c16;
+  background: var(--bg-input);
   color: var(--text);
   font-size: 14px;
 }
@@ -199,7 +293,7 @@ html, body {
 }
 .btn-primary { background: var(--pink); color: #fff; }
 .btn-secondary { background: var(--cyan); color: #06201f; }
-.btn-danger { background: #3a3a50; color: var(--text); }
+.btn-danger { background: var(--danger); color: #2b0b0b; }
 
 /* ---- Settings drawer (bottom sheet on mobile) ---------------------- */
 .settings-overlay {
@@ -232,6 +326,32 @@ html, body {
 }
 .settings-header h2 { margin: 0; font-size: 16px; }
 .settings-divider { height: 1px; background: var(--border); margin: 14px 0; }
+
+/* ---- Theme picker ------------------------------------------------------ */
+.theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.theme-label { font-size: 13.5px; }
+.theme-buttons { display: flex; gap: 6px; }
+.theme-btn {
+  background: var(--bg-input);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.theme-btn.active { background: var(--cyan); color: #06201f; border-color: var(--cyan); font-weight: 700; }
+
 .auto-next-toggle {
   display: flex;
   align-items: center;
@@ -249,7 +369,7 @@ html, body {
   width: 38px;
   height: 22px;
   border-radius: 20px;
-  background: #3a3a50;
+  background: var(--border);
   position: relative;
   transition: background 0.15s ease;
 }
@@ -295,26 +415,26 @@ html, body {
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: #0c0c16;
+  background: var(--bg-input);
   color: var(--text);
   font-size: 14px;
 }
 .status-line { font-size: 13px; padding: 6px 0; }
 .status-idle { color: var(--text-dim); }
-.status-connected { color: #3ddc84; }
-.status-error { color: var(--pink); }
-.status-retrying, .status-connecting { color: #f5c542; }
+.status-connected { color: var(--success); }
+.status-error { color: var(--danger); }
+.status-retrying, .status-connecting { color: var(--warning); }
 .puzzle-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .puzzle-controls select {
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: #0c0c16;
+  background: var(--bg-input);
   color: var(--text);
 }
 .legend-box-full {
   padding: 10px 12px;
-  background: rgba(37, 244, 238, 0.08);
+  background: var(--legend-bg);
   border: 1px solid var(--cyan);
   border-radius: 10px;
   font-size: 13px;

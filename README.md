@@ -14,6 +14,17 @@ To run it on your own computer first (recommended before deploying):
   3. Run: npm start
   4. Open http://localhost:3000 in your browser.
 
+v1.4 changes:
+  - Easier-on-the-eyes color palette: the neon pink/cyan and near-black
+    background have been softened, and every text/background pairing was
+    checked against WCAG contrast guidelines. A Light theme is now also
+    available (Settings -> Theme), and the app follows the viewer's OS
+    dark/light preference automatically until they pick one manually
+    (their choice is remembered on that device).
+  - Host Console is now collapsible: tap "Hide" next to "Host Console" at
+    the bottom of the screen to tuck the input bar away and reclaim
+    space; tap "Show" to bring it back. Remembered per device.
+
 v1.3 changes:
   - Full Screen button (top-right, next to the gear icon): puts the app in
     true browser full screen - handy when the dashboard is displayed on a

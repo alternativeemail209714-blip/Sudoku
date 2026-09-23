@@ -10,6 +10,73 @@
   window.addEventListener("resize", setViewportHeight);
   setViewportHeight();
 
+  // ---- Theme (Dark / Light) -------------------------------------------
+  // Defaults to the viewer's OS/browser preference; an explicit choice
+  // here is remembered on this device (localStorage) and always wins.
+  var THEME_STORAGE_KEY = "sudokuLiveTheme";
+  var themeButtons = document.querySelectorAll(".theme-btn");
+
+  function applyTheme(theme) {
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.setAttribute("data-theme", theme);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+    themeButtons.forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-theme-choice") === theme);
+    });
+  }
+  themeButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var choice = btn.getAttribute("data-theme-choice");
+      applyTheme(choice);
+      try { localStorage.setItem(THEME_STORAGE_KEY, choice); } catch (e) { /* storage unavailable - ignore */ }
+    });
+  });
+  (function initTheme() {
+    var saved = null;
+    try { saved = localStorage.getItem(THEME_STORAGE_KEY); } catch (e) { /* ignore */ }
+    if (saved === "light" || saved === "dark") {
+      applyTheme(saved);
+    } else {
+      var prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+      themeButtons.forEach(function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-theme-choice") === (prefersLight ? "light" : "dark"));
+      });
+    }
+  })();
+
+  // ---- Host console collapse/expand ----------------------------------
+  // Lets the host hide the bottom console (input + Send) to reclaim
+  // screen space once they're done using it manually. Remembered on
+  // this device between visits.
+  var HOST_CONSOLE_STORAGE_KEY = "sudokuLiveHostConsoleCollapsed";
+  var hostConsoleBar = document.getElementById("hostConsoleBar");
+  var hostConsoleRow = document.getElementById("hostConsoleRow");
+  var hostConsoleToggle = document.getElementById("hostConsoleToggle");
+
+  function updateHostConsoleOffset() {
+    if (!hostConsoleBar) return;
+    document.documentElement.style.setProperty("--host-console-offset", hostConsoleBar.offsetHeight + "px");
+  }
+  function setHostConsoleCollapsed(collapsed) {
+    hostConsoleBar.classList.toggle("collapsed", collapsed);
+    hostConsoleRow.hidden = collapsed;
+    hostConsoleToggle.innerHTML = collapsed ? "&#9650; Show" : "&#9660; Hide";
+    hostConsoleToggle.setAttribute("aria-label", collapsed ? "Show host console" : "Hide host console");
+    try { localStorage.setItem(HOST_CONSOLE_STORAGE_KEY, collapsed ? "1" : "0"); } catch (e) { /* ignore */ }
+    updateHostConsoleOffset();
+  }
+  hostConsoleToggle.addEventListener("click", function () {
+    setHostConsoleCollapsed(!hostConsoleBar.classList.contains("collapsed"));
+  });
+  window.addEventListener("resize", updateHostConsoleOffset);
+  (function initHostConsoleCollapse() {
+    var saved = null;
+    try { saved = localStorage.getItem(HOST_CONSOLE_STORAGE_KEY); } catch (e) { /* ignore */ }
+    setHostConsoleCollapsed(saved === "1");
+  })();
+
   // ---- Full Screen toggle --------------------------------------------------
   // Uses the standard Fullscreen API (with vendor-prefixed fallbacks for
   // older Safari/IE/Edge). The board itself never stretches to fill the

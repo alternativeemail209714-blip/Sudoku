@@ -57,9 +57,15 @@
     </div>
   </main>
 
-  <footer class="host-console-bar">
-    <input id="hostConsoleInput" type="text" placeholder="Host console: A5 7" autocomplete="off">
-    <button id="hostConsoleBtn" class="btn btn-primary">Send</button>
+  <footer class="host-console-bar" id="hostConsoleBar">
+    <div class="host-console-head">
+      <span class="host-console-label">Host Console</span>
+      <button id="hostConsoleToggle" class="host-console-toggle" type="button" aria-label="Hide host console">&#9660; Hide</button>
+    </div>
+    <div class="host-console-row" id="hostConsoleRow">
+      <input id="hostConsoleInput" type="text" placeholder="Host console: A5 7" autocomplete="off">
+      <button id="hostConsoleBtn" class="btn btn-primary">Send</button>
+    </div>
   </footer>
 
   <!-- Settings drawer: mode switching, TikTok connect, test tools, new puzzle -->
@@ -69,6 +75,14 @@
       <div class="settings-header">
         <h2>Settings</h2>
         <button id="closeSettingsBtn" class="icon-btn" aria-label="Close">&#10005;</button>
+      </div>
+
+      <div class="theme-row">
+        <span class="theme-label">Theme (easier on the eyes)</span>
+        <div class="theme-buttons">
+          <button type="button" id="themeDarkBtn" class="theme-btn" data-theme-choice="dark">Dark</button>
+          <button type="button" id="themeLightBtn" class="theme-btn" data-theme-choice="light">Light</button>
+        </div>
       </div>
 
       <div class="mode-tabs">
