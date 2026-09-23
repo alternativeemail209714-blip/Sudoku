@@ -750,6 +750,7 @@
     if (autoNextDelayInputEl && typeof state.autoNextDelaySeconds === "number" && document.activeElement !== autoNextDelayInputEl) {
       autoNextDelayInputEl.value = state.autoNextDelaySeconds;
     }
+    applyHostDefaultsOnce(state);
   });
 
   // ---- TikTok LIVE config - lets the host skip re-entering the Sign API
@@ -1057,21 +1058,130 @@
   var saveSettingsBtnEl = document.getElementById("saveSettingsBtn");
   var saveSettingsConfirmEl = document.getElementById("saveSettingsConfirm");
   var saveSettingsConfirmTimer = null;
+  function showSaveConfirm(message) {
+    if (!saveSettingsConfirmEl) return;
+    saveSettingsConfirmEl.textContent = message;
+    saveSettingsConfirmEl.hidden = false;
+    if (saveSettingsConfirmTimer) clearTimeout(saveSettingsConfirmTimer);
+    saveSettingsConfirmTimer = setTimeout(function () {
+      saveSettingsConfirmEl.hidden = true;
+    }, 2500);
+  }
+  function flushFocusedField() {
+    if (document.activeElement && document.activeElement !== document.body && typeof document.activeElement.blur === "function") {
+      document.activeElement.blur();
+    }
+  }
   if (saveSettingsBtnEl) {
     saveSettingsBtnEl.addEventListener("click", function () {
-      if (document.activeElement && document.activeElement !== document.body && typeof document.activeElement.blur === "function") {
-        document.activeElement.blur();
-      }
+      flushFocusedField();
       saveTimingPrefs(timingPrefs);
       try { localStorage.setItem(THEME_STORAGE_KEY, getEffectiveThemeKey()); } catch (e) { /* ignore */ }
       try { localStorage.setItem(HOST_CONSOLE_STORAGE_KEY, hostConsoleBar.classList.contains("collapsed") ? "1" : "0"); } catch (e) { /* ignore */ }
-      if (saveSettingsConfirmEl) {
-        saveSettingsConfirmEl.hidden = false;
-        if (saveSettingsConfirmTimer) clearTimeout(saveSettingsConfirmTimer);
-        saveSettingsConfirmTimer = setTimeout(function () {
-          saveSettingsConfirmEl.hidden = true;
-        }, 2500);
+      showSaveConfirm("\u2713 Settings saved & applied");
+    });
+  }
+
+  // ---- Save & Apply as Default ---------------------------------------------
+  // Bundles the host-level preferences - theme, mode, difficulty, Auto Next
+  // Round (and its delay), Bot Auto-Solve, and TikTok username - into one
+  // snapshot saved on this device. Every time this page loads, that snapshot
+  // is re-applied automatically, so the host never has to reconfigure the
+  // dashboard by hand again - even after the server process itself restarts
+  // and loses its in-memory game state (e.g. a Render free-tier spin-down
+  // between streams), since the snapshot lives in the browser, not the
+  // server. Applying a saved difficulty that differs from whatever puzzle
+  // is currently loaded does start a fresh puzzle at that difficulty - this
+  // is called out in the on-screen hint next to the button.
+  var DEFAULTS_STORAGE_KEY = "sudokuLiveHostDefaultsV1";
+  var hostDefaultsApplied = false;
+
+  function saveHostDefaults() {
+    var defaults = {
+      theme: getEffectiveThemeKey(),
+      mode: currentMode,
+      difficulty: currentDifficulty,
+      autoNextRound: !!autoNextToggleEl.checked,
+      autoNextDelaySeconds: autoNextDelayInputEl ? parseFloat(autoNextDelayInputEl.value) : undefined,
+      botAutoSolveEnabled: botAutoSolveToggleEl ? !!botAutoSolveToggleEl.checked : false
+    };
+    var usernameInput = document.getElementById("tiktokUsername");
+    if (usernameInput && usernameInput.value.trim()) {
+      defaults.tiktokUsername = usernameInput.value.trim();
+    }
+    try { localStorage.setItem(DEFAULTS_STORAGE_KEY, JSON.stringify(defaults)); } catch (e) { /* storage unavailable - ignore */ }
+    return defaults;
+  }
+
+  function loadHostDefaults() {
+    try {
+      var raw = localStorage.getItem(DEFAULTS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Runs once, the first time a "state" broadcast arrives after this page
+  // loads - applying any saved default that differs from what the server
+  // currently has, so a freshly (re)started server picks the host's chosen
+  // setup right back up.
+  function applyHostDefaultsOnce(state) {
+    if (hostDefaultsApplied) return;
+    hostDefaultsApplied = true;
+    var defaults = loadHostDefaults();
+    if (!defaults) return;
+
+    if (defaults.mode && defaults.mode !== state.mode) {
+      showMode(defaults.mode);
+      socket.emit("host:setMode", { mode: defaults.mode });
+    }
+    if (typeof defaults.autoNextRound === "boolean" && defaults.autoNextRound !== !!state.autoNextRound) {
+      autoNextToggleEl.checked = defaults.autoNextRound;
+      socket.emit("host:setAutoNext", { enabled: defaults.autoNextRound });
+      if (!defaults.autoNextRound) clearAutoNextCountdown();
+    }
+    if (typeof defaults.autoNextDelaySeconds === "number" && !isNaN(defaults.autoNextDelaySeconds) &&
+        defaults.autoNextDelaySeconds !== state.autoNextDelaySeconds) {
+      if (autoNextDelayInputEl) autoNextDelayInputEl.value = defaults.autoNextDelaySeconds;
+      socket.emit("host:setAutoNextDelay", { seconds: defaults.autoNextDelaySeconds });
+    }
+    if (botAutoSolveToggleEl && typeof defaults.botAutoSolveEnabled === "boolean" &&
+        defaults.botAutoSolveEnabled !== !!state.botAutoSolveEnabled) {
+      botAutoSolveToggleEl.checked = defaults.botAutoSolveEnabled;
+      socket.emit("host:setBotAutoSolve", { enabled: defaults.botAutoSolveEnabled });
+    }
+    if (defaults.difficulty && DIFFICULTY_META[defaults.difficulty]) {
+      if (defaults.difficulty !== state.lastDifficulty) {
+        syncDifficultySelects(defaults.difficulty);
+        socket.emit("host:newPuzzle", { difficulty: defaults.difficulty });
+      } else {
+        syncDifficultySelects(defaults.difficulty);
       }
+    }
+    if (defaults.tiktokUsername) {
+      var usernameInput = document.getElementById("tiktokUsername");
+      if (usernameInput && !usernameInput.value) usernameInput.value = defaults.tiktokUsername;
+    }
+  }
+
+  var saveDefaultSettingsBtnEl = document.getElementById("saveDefaultSettingsBtn");
+  if (saveDefaultSettingsBtnEl) {
+    saveDefaultSettingsBtnEl.addEventListener("click", function () {
+      flushFocusedField();
+      saveTimingPrefs(timingPrefs);
+      try { localStorage.setItem(THEME_STORAGE_KEY, getEffectiveThemeKey()); } catch (e) { /* ignore */ }
+      try { localStorage.setItem(HOST_CONSOLE_STORAGE_KEY, hostConsoleBar.classList.contains("collapsed") ? "1" : "0"); } catch (e) { /* ignore */ }
+      saveHostDefaults();
+      showSaveConfirm("\u2713 Saved as default - will auto-load every time");
+    });
+  }
+
+  var clearDefaultSettingsBtnEl = document.getElementById("clearDefaultSettingsBtn");
+  if (clearDefaultSettingsBtnEl) {
+    clearDefaultSettingsBtnEl.addEventListener("click", function () {
+      try { localStorage.removeItem(DEFAULTS_STORAGE_KEY); } catch (e) { /* ignore */ }
+      showSaveConfirm("Saved default cleared");
     });
   }
 

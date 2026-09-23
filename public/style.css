@@ -652,6 +652,28 @@ html, body {
   margin: 0 0 12px 0;
 }
 
+/* ---- Save & Apply as Default button --------------------------------------
+   Bundles the host-level preferences (theme, mode, difficulty, auto-next,
+   bot auto-solve, TikTok username) into one saved snapshot on this device,
+   and re-applies it the moment the page reconnects - including after the
+   server itself has restarted and lost its in-memory state. */
+.save-default-settings-btn { width: 100%; margin-bottom: 6px; }
+.save-default-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin: 0 0 12px 0;
+}
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--cyan);
+  text-decoration: underline;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+
 .auto-next-toggle {
   display: flex;
   align-items: center;

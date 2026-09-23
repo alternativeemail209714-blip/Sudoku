@@ -1,5 +1,48 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v2.4 changes:
+  - New "Save & Apply as Default" button in Settings, alongside the existing
+    "Save & Apply Settings". It bundles Theme, Mode (Offline/Test/Live),
+    Difficulty, Auto Next Round (and its delay), Bot Auto-Solve, and your
+    TikTok username into one snapshot saved on this device, and
+    automatically re-applies that snapshot every time this page loads -
+    including after the server process itself restarts and loses its
+    in-memory game state (e.g. a Render free-tier spin-down between
+    streams). No more re-picking the same settings before every stream.
+    A small "Clear saved default" link under the button removes the
+    snapshot if you want to go back to the plain hardcoded defaults.
+    Note: if the saved default difficulty differs from whatever puzzle is
+    currently loaded, applying it does start a fresh puzzle at that
+    difficulty - this is called out in the hint text under the button.
+  - Also added a matching "New To Sudoku? Rules Of The Puzzle" section
+    under How To Play, and turned both How To Play sections into short
+    numbered/icon lists instead of paragraphs, for newcomers who have
+    never played Sudoku before.
+
+v2.3 changes:
+  - Added a second "How To Play" box specifically for people who have
+    never played Sudoku before: the 9x9 grid / 3x3 boxes layout, the
+    goal, the three no-repeat rules (row, column, box), what "given"
+    numbers are, a basic scanning tip, and what counts as solved -
+    all in the same short numbered/icon list style as the live-game
+    instructions above it.
+
+v2.2 changes:
+  - How To Play instructions in Settings are now a short numbered list
+    with icons instead of one dense paragraph, for easier reading.
+  - Fixed leaderboard rows (both the in-page panels and the floating
+    Leaderboards window) sometimes showing with no gap between an
+    audience member's photo/name/points and the next one's - the This
+    Round and All-Time lists could both end up rendered at once because
+    the `hidden` attribute was being silently overridden by a `display`
+    rule from CSS. Fixed everywhere, in normal view and Full Screen.
+  - Fixed the Difficulty and Theme dropdowns in the top toolbar not
+    opening in Full Screen mode (normal browser view already worked).
+    Root cause: the browser's Fullscreen API only renders elements that
+    are actually inside the fullscreened element, and these dropdown
+    menus were being moved out to a spot outside it. They now stay
+    inside the fullscreened area, so they open correctly in both modes.
+
 v2.1 changes:
   - Fixed the Difficulty and Theme dropdowns in the top toolbar not
     opening/responding on tap. Root cause: the toolbar row scrolls
