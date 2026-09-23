@@ -134,6 +134,14 @@
           <input id="testCustomText" type="text" placeholder="Or type a fake comment, e.g. A5 7">
           <button id="testCustomBtn" class="btn btn-secondary">Send As Fake Viewer</button>
         </div>
+        <label class="auto-next-toggle bot-auto-solve-toggle">
+          <input type="checkbox" id="botAutoSolveToggle">
+          <span class="toggle-switch" aria-hidden="true"></span>
+          <span class="toggle-label">
+            Auto-Solve (Bots)
+            <small>A few bots keep answering random cells on their own until the puzzle is completed.</small>
+          </span>
+        </label>
       </section>
 
       <section class="panel offline-panel" data-panel="offline">
@@ -147,6 +155,16 @@
 
       <div class="settings-divider"></div>
 
+      <div class="hints-box">
+        <h3 class="hints-title">Hints &amp; Reveals</h3>
+        <p class="hint">Instantly fill in answers. Revealed cells never award viewer points.</p>
+        <div class="hints-buttons">
+          <button id="revealCellBtn" class="btn btn-secondary">Reveal 1 Cell</button>
+          <button id="revealBoxBtn" class="btn btn-secondary">Reveal 3&times;3 Box</button>
+          <button id="revealBoardBtn" class="btn btn-danger">Reveal Whole Board</button>
+        </div>
+      </div>
+
       <label class="auto-next-toggle">
         <input type="checkbox" id="autoNextToggle">
         <span class="toggle-switch" aria-hidden="true"></span>
@@ -158,9 +176,13 @@
 
       <div class="puzzle-controls">
         <select id="difficultySelect">
+          <option value="very-easy">Very Easy</option>
           <option value="easy">Easy</option>
-          <option value="medium" selected>Medium</option>
+          <option value="moderate" selected>Moderate</option>
           <option value="hard">Hard</option>
+          <option value="very-hard">Very Hard</option>
+          <option value="extreme">Extreme</option>
+          <option value="extremely-hard">Extremely Hard</option>
         </select>
         <button id="newPuzzleBtn" class="btn btn-secondary">New Puzzle</button>
       </div>

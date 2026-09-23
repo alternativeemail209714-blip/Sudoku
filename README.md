@@ -1,5 +1,21 @@
 # TikTok Sudoku LIVE - Deployment Ready
 
+v1.6 changes:
+  - Hints & Reveals (in Settings): "Reveal 1 Cell" fills in one random
+    unsolved cell, "Reveal 3x3 Box" fills in a whole box at once, and
+    "Reveal Whole Board" instantly completes the puzzle (asks for
+    confirmation first, since it ends the round). None of these award any
+    points to viewers - they're host-only tools.
+  - Difficulty now has 7 levels instead of 3: Very Easy, Easy, Moderate,
+    Hard, Very Hard, Extreme, and Extremely Hard. Each level has its own
+    bank of at least 100 pre-generated puzzles (700 total), built fresh
+    every time the server starts.
+  - Test Mode has a new "Auto-Solve (Bots)" toggle: turn it on and a
+    small rotating cast of bots will keep answering random cells on their
+    own (mostly correctly, occasionally wrong for realism) until the
+    puzzle is completed - handy for watching a full round play out, or
+    for load-testing, without touching the console yourself.
+
 v1.5 changes:
   - Fixed a bug where the Light theme looked half-broken (dark patches
     around the edges) while in Full Screen mode. The browser's fullscreen

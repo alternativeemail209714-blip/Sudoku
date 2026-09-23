@@ -610,3 +610,19 @@ html, body {
 }
 .round-end-name { flex: 1; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .round-end-points { flex: 0 0 auto; font-weight: 700; color: var(--success); font-size: 13.5px; }
+
+/* ---- Hints & Reveals box -------------------------------------------- */
+.hints-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.hints-title { margin: 0 0 4px 0; font-size: 14px; color: var(--cyan); }
+.hints-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.hints-buttons .btn { flex: 1 1 auto; }
+
+/* Test panel's bot toggle sits right after the fake-chat controls, so it
+   doesn't need the bottom margin the settings-drawer toggle normally has. */
+.bot-auto-solve-toggle { margin-bottom: 0; }

@@ -511,6 +511,13 @@
     if (!state.solved) clearAutoNextCountdown();
 
     autoNextToggleEl.checked = !!state.autoNextRound;
+    if (botAutoSolveToggleEl) botAutoSolveToggleEl.checked = !!state.botAutoSolveEnabled;
+    if (state.lastDifficulty) {
+      var difficultySelectEl = document.getElementById("difficultySelect");
+      if (difficultySelectEl && difficultySelectEl.value !== state.lastDifficulty) {
+        difficultySelectEl.value = state.lastDifficulty;
+      }
+    }
   });
 
   socket.on("diagnostics", function (diag) {
@@ -631,6 +638,25 @@
     clearAutoNextCountdown();
     hideRoundEndOverlay();
     closeSettings();
+  });
+
+  // ---- Hints & Reveals ---------------------------------------------------
+  document.getElementById("revealCellBtn").addEventListener("click", function () {
+    socket.emit("host:revealCell");
+  });
+  document.getElementById("revealBoxBtn").addEventListener("click", function () {
+    socket.emit("host:revealBox");
+  });
+  document.getElementById("revealBoardBtn").addEventListener("click", function () {
+    if (window.confirm("Reveal the entire board? This instantly ends the round.")) {
+      socket.emit("host:revealBoard");
+    }
+  });
+
+  // ---- Test mode: bot auto-solve ------------------------------------------
+  var botAutoSolveToggleEl = document.getElementById("botAutoSolveToggle");
+  botAutoSolveToggleEl.addEventListener("change", function () {
+    socket.emit("host:setBotAutoSolve", { enabled: botAutoSolveToggleEl.checked });
   });
 
 })();

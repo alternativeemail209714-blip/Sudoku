@@ -69,11 +69,10 @@ function generateSolvedBoard() {
   return board;
 }
 
-function generatePuzzle(difficulty) {
+function generatePuzzle(clues) {
   var solution = generateSolvedBoard();
   var puzzle = solution.map(function (row) { return row.slice(); });
-  var clueCounts = { easy: 42, medium: 32, hard: 26 };
-  var clues = clueCounts[difficulty] || clueCounts.medium;
+  if (!clues || clues < 17) clues = 30;
   var cellsToRemove = 81 - clues;
   var positions = [];
   for (var i = 0; i < 81; i++) positions.push(i);
@@ -99,19 +98,31 @@ function generatePuzzle(difficulty) {
 //     reshuffled once the whole bank has been used, so every puzzle in the
 //     bank is seen once before any repeats.
 // ---------------------------------------------------------------------------
-var DIFFICULTIES = ["easy", "medium", "hard"];
+var DIFFICULTIES = ["very-easy", "easy", "moderate", "hard", "very-hard", "extreme", "extremely-hard"];
+var CLUE_COUNTS = {
+  "very-easy": 48,
+  "easy": 42,
+  "moderate": 36,
+  "hard": 30,
+  "very-hard": 26,
+  "extreme": 23,
+  "extremely-hard": 20
+};
+var DEFAULT_DIFFICULTY = "moderate";
 var PUZZLES_PER_DIFFICULTY = 100;
-var puzzleBank = { easy: [], medium: [], hard: [] };
-var puzzleDrawQueue = { easy: [], medium: [], hard: [] };
+var puzzleBank = {};
+var puzzleDrawQueue = {};
 
 function buildPuzzleBank() {
   var startedAt = Date.now();
   DIFFICULTIES.forEach(function (difficulty) {
+    var clues = CLUE_COUNTS[difficulty];
     var list = [];
     for (var i = 0; i < PUZZLES_PER_DIFFICULTY; i++) {
-      list.push(generatePuzzle(difficulty));
+      list.push(generatePuzzle(clues));
     }
     puzzleBank[difficulty] = list;
+    puzzleDrawQueue[difficulty] = [];
   });
   console.log(
     "[puzzle bank] generated " + PUZZLES_PER_DIFFICULTY + " puzzles each for " +
@@ -131,7 +142,7 @@ function shuffledIndices(count) {
 }
 
 function drawPuzzle(difficulty) {
-  if (!puzzleBank[difficulty] || puzzleBank[difficulty].length === 0) difficulty = "medium";
+  if (!puzzleBank[difficulty] || puzzleBank[difficulty].length === 0) difficulty = DEFAULT_DIFFICULTY;
   if (!puzzleDrawQueue[difficulty] || puzzleDrawQueue[difficulty].length === 0) {
     puzzleDrawQueue[difficulty] = shuffledIndices(puzzleBank[difficulty].length);
   }
@@ -194,14 +205,14 @@ function createGameState() {
     allTimeScores: {},    // persists across every puzzle for the life of the server
     rawEventCount: 0,
     lastReceived: null,
-    lastDifficulty: "medium",
+    lastDifficulty: DEFAULT_DIFFICULTY,
     autoNextRound: false, // when true, a new puzzle starts automatically after each solve
     roundStartTime: Date.now(), // used to show elapsed solve time - there is NO time limit
     solveTimeMs: null
   };
 
   function reset(difficulty) {
-    difficulty = difficulty || state.lastDifficulty || "medium";
+    difficulty = difficulty || state.lastDifficulty || DEFAULT_DIFFICULTY;
     state.lastDifficulty = difficulty;
     var built = drawPuzzle(difficulty);
     state.puzzle = built.puzzle;
@@ -215,7 +226,7 @@ function createGameState() {
     state.roundStartTime = Date.now();
     state.solveTimeMs = null;
   }
-  reset("medium");
+  reset(DEFAULT_DIFFICULTY);
 
   function setAutoNext(enabled) {
     state.autoNextRound = !!enabled;
@@ -275,6 +286,78 @@ function createGameState() {
     return { status: "wrong", coord: coordLabel(row, col), num: num };
   }
 
+  // ---- Hints / Reveals (host-triggered, never award any player points) --
+  function markSolvedIfNeeded() {
+    var solvedNow = checkSolved();
+    if (solvedNow && !state.solved) {
+      state.solved = true;
+      state.solveTimeMs = Date.now() - state.roundStartTime;
+    }
+    return solvedNow;
+  }
+
+  function findUnsolvedCells(withinBox) {
+    var cells = [];
+    var rStart = 0, rEnd = 9, cStart = 0, cEnd = 9;
+    if (withinBox) {
+      rStart = withinBox.row; rEnd = withinBox.row + 3;
+      cStart = withinBox.col; cEnd = withinBox.col + 3;
+    }
+    for (var r = rStart; r < rEnd; r++) {
+      for (var c = cStart; c < cEnd; c++) {
+        if (!state.givenMask[r][c] && state.board[r][c] !== state.solution[r][c]) {
+          cells.push({ row: r, col: c });
+        }
+      }
+    }
+    return cells;
+  }
+
+  // Reveals one random still-unsolved cell (the "smaller box" hint).
+  function revealCell() {
+    if (state.solved) return { revealed: 0, justSolved: false };
+    var candidates = findUnsolvedCells(null);
+    if (!candidates.length) return { revealed: 0, justSolved: false };
+    var pick = candidates[Math.floor(Math.random() * candidates.length)];
+    state.board[pick.row][pick.col] = state.solution[pick.row][pick.col];
+    var solvedNow = markSolvedIfNeeded();
+    return { revealed: 1, coord: coordLabel(pick.row, pick.col), justSolved: solvedNow };
+  }
+
+  // Reveals a whole random 3x3 box that still has unsolved cells in it
+  // (the "bigger box" reveal).
+  function revealBox() {
+    if (state.solved) return { revealed: 0, justSolved: false };
+    var boxOrder = shuffledIndices(9);
+    var target = null;
+    for (var i = 0; i < boxOrder.length; i++) {
+      var boxRow = Math.floor(boxOrder[i] / 3) * 3;
+      var boxCol = (boxOrder[i] % 3) * 3;
+      var cells = findUnsolvedCells({ row: boxRow, col: boxCol });
+      if (cells.length) { target = cells; break; }
+    }
+    if (!target) return { revealed: 0, justSolved: false };
+    target.forEach(function (cell) {
+      state.board[cell.row][cell.col] = state.solution[cell.row][cell.col];
+    });
+    var solvedNow = markSolvedIfNeeded();
+    return { revealed: target.length, justSolved: solvedNow };
+  }
+
+  // Reveals the entire board - instantly ends the round.
+  function revealBoard() {
+    if (state.solved) return { revealed: 0, justSolved: false };
+    var revealedCount = findUnsolvedCells(null).length;
+    for (var r = 0; r < 9; r++) {
+      for (var c = 0; c < 9; c++) {
+        state.board[r][c] = state.solution[r][c];
+      }
+    }
+    state.solved = true;
+    state.solveTimeMs = Date.now() - state.roundStartTime;
+    return { revealed: revealedCount, justSolved: true };
+  }
+
   function buildLeaderboard(scoresObj, limit) {
     var entries = Object.keys(scoresObj).map(function (id) {
       var s = scoresObj[id];
@@ -316,6 +399,9 @@ function createGameState() {
     state: state,
     reset: reset,
     applyGuess: applyGuess,
+    revealCell: revealCell,
+    revealBox: revealBox,
+    revealBoard: revealBoard,
     setAutoNext: setAutoNext,
     getLeaderboard: getLeaderboard,
     getAllTimeLeaderboard: getAllTimeLeaderboard,
@@ -486,8 +572,57 @@ var io = new Server(httpServer);
 
 var game = createGameState();
 
+// ---- Test Mode bot auto-solve -----------------------------------------
+// When enabled, a small set of fake "bot" viewers keep answering random
+// unsolved cells (mostly correctly) until the puzzle is complete, so the
+// host can watch a full round play out hands-free while testing.
+var BOT_TICK_MS = 700;
+var BOT_CORRECT_CHANCE = 0.85;
+var BOT_IDENTITIES = [
+  { uniqueId: "bot-alpha", name: "Bot Alpha" },
+  { uniqueId: "bot-bravo", name: "Bot Bravo" },
+  { uniqueId: "bot-charlie", name: "Bot Charlie" },
+  { uniqueId: "bot-delta", name: "Bot Delta" }
+];
+var botAutoSolveEnabled = false;
+var botAutoSolveTimer = null;
+
+function botTick() {
+  var candidates = [];
+  for (var r = 0; r < 9; r++) {
+    for (var c = 0; c < 9; c++) {
+      if (!game.state.givenMask[r][c] && game.state.board[r][c] !== game.state.solution[r][c]) {
+        candidates.push([r, c]);
+      }
+    }
+  }
+  if (!candidates.length) return; // nothing to solve right now (solved, or between puzzles)
+  var cell = candidates[Math.floor(Math.random() * candidates.length)];
+  var row = cell[0], col = cell[1];
+  var bot = BOT_IDENTITIES[Math.floor(Math.random() * BOT_IDENTITIES.length)];
+  var useCorrect = Math.random() < BOT_CORRECT_CHANCE;
+  var num = useCorrect ? game.state.solution[row][col] : (Math.floor(Math.random() * 9) + 1);
+  var text = coordLabel(row, col) + " " + num;
+  processComment(text, bot.uniqueId, bot.name, "test-bot", null);
+}
+
+function setBotAutoSolveEnabled(enabled) {
+  botAutoSolveEnabled = !!enabled;
+  if (botAutoSolveTimer) {
+    clearInterval(botAutoSolveTimer);
+    botAutoSolveTimer = null;
+  }
+  if (botAutoSolveEnabled) {
+    botAutoSolveTimer = setInterval(function () {
+      try { botTick(); } catch (err) { console.error("[bot tick error - swallowed]", err); }
+    }, BOT_TICK_MS);
+  }
+}
+
 function broadcastState() {
-  io.emit("state", game.getPublicState());
+  var publicState = game.getPublicState();
+  publicState.botAutoSolveEnabled = botAutoSolveEnabled;
+  io.emit("state", publicState);
 }
 
 // Wraps a handler so a thrown error is logged, never crashes the server.
@@ -526,6 +661,18 @@ function scheduleAutoNext() {
   }, AUTO_NEXT_DELAY_MS);
 }
 
+// Shared by both viewer guesses and host reveals: whenever an action just
+// completed the puzzle, tell everyone and (optionally) queue the next round.
+function emitPuzzleSolvedIfNeeded(justSolved) {
+  if (!justSolved) return;
+  io.emit("puzzleSolved", {
+    leaderboard: game.getLeaderboard(10),
+    allTimeLeaderboard: game.getAllTimeLeaderboard(10),
+    solveTimeMs: game.state.solveTimeMs
+  });
+  if (game.state.autoNextRound) scheduleAutoNext();
+}
+
 // Remembers the last-known avatar for each viewer id, so a viewer's photo
 // stays attached to their wrong/unparsed guesses too, not just correct ones
 // (those don't otherwise touch the score tables where avatars are stored).
@@ -556,14 +703,7 @@ function processComment(text, uniqueId, nickname, source, avatarUrl) {
     solved: result.solved
   });
   broadcastState();
-  if (result.status === "correct" && result.solved) {
-    io.emit("puzzleSolved", {
-      leaderboard: game.getLeaderboard(10),
-      allTimeLeaderboard: game.getAllTimeLeaderboard(10),
-      solveTimeMs: game.state.solveTimeMs
-    });
-    if (game.state.autoNextRound) scheduleAutoNext();
-  }
+  emitPuzzleSolvedIfNeeded(result.status === "correct" && result.solved);
 }
 
 var tiktok = createTikTokConnector(
@@ -582,7 +722,9 @@ var FAKE_VIEWER_NAMES = ["SudokuFan", "LiveViewer", "ChatMaster", "PuzzlePro", "
 
 io.on("connection", function (socket) {
   console.log("[client connected]", socket.id);
-  socket.emit("state", game.getPublicState());
+  var initialState = game.getPublicState();
+  initialState.botAutoSolveEnabled = botAutoSolveEnabled;
+  socket.emit("state", initialState);
   socket.emit("liveStatus", { state: "idle", message: "Not connected." });
 
   socket.on("host:setMode", safe(function (payload) {
@@ -604,6 +746,29 @@ io.on("connection", function (socket) {
     var difficulty = payload && payload.difficulty ? payload.difficulty : game.state.lastDifficulty;
     cancelAutoNext();
     game.reset(difficulty);
+    broadcastState();
+  }));
+
+  socket.on("host:revealCell", safe(function () {
+    var result = game.revealCell();
+    broadcastState();
+    emitPuzzleSolvedIfNeeded(result.justSolved);
+  }));
+
+  socket.on("host:revealBox", safe(function () {
+    var result = game.revealBox();
+    broadcastState();
+    emitPuzzleSolvedIfNeeded(result.justSolved);
+  }));
+
+  socket.on("host:revealBoard", safe(function () {
+    var result = game.revealBoard();
+    broadcastState();
+    emitPuzzleSolvedIfNeeded(result.justSolved);
+  }));
+
+  socket.on("host:setBotAutoSolve", safe(function (payload) {
+    setBotAutoSolveEnabled(!!(payload && payload.enabled));
     broadcastState();
   }));
 
