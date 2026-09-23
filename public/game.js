@@ -109,10 +109,18 @@
     // scroll sideways on narrow phones - but per the CSS overflow spec, an
     // element that clips one axis also clips the other, so the menu was
     // being silently cut off the moment it tried to open below the button.
-    // Moving the menu out to <body> and positioning it with `fixed`
-    // (computed fresh from the button's on-screen position every time it
-    // opens) sidesteps that clipping entirely.
-    document.body.appendChild(menu);
+    // Moving the menu out and positioning it with `fixed` (computed fresh
+    // from the button's on-screen position every time it opens) sidesteps
+    // that clipping entirely.
+    //
+    // IMPORTANT: it must be moved to inside .app-shell, NOT document.body.
+    // The Fullscreen API only renders descendants of the element that's
+    // actually fullscreened (.app-shell here) - anything living outside
+    // that subtree, like a menu parked directly on <body>, is invisible
+    // while fullscreen is active even though `position: fixed` still
+    // "works" in the sense of computing a screen position. That's why
+    // both dropdowns previously broke only in Full Screen mode.
+    (document.querySelector(".app-shell") || document.body).appendChild(menu);
 
     function positionMenu() {
       var rect = btn.getBoundingClientRect();

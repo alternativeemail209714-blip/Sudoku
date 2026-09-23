@@ -170,6 +170,19 @@
 }
 
 * { box-sizing: border-box; }
+/* Global safety net for the native `hidden` attribute. Several elements
+   in this app (leaderboard lists, panels, overlays, etc.) also carry a
+   class that sets an explicit `display` value (flex/grid/block) for when
+   they're visible. Because an author-stylesheet rule always wins over the
+   browser's built-in `[hidden] { display:none }` default - even when both
+   rules have identical specificity - those classes were quietly
+   cancelling `hidden` out and leaving the element rendered anyway. That
+   was the actual cause of "two leaderboards" appearing squashed together
+   with no gap: the All-Time list was never really hidden, it was just
+   drawn immediately after the This-Round list. Marking this rule
+   `!important` guarantees `hidden` always wins, for every element, no
+   matter what other display rule targets it. */
+[hidden] { display: none !important; }
 html, body {
   margin: 0;
   padding: 0;
@@ -727,6 +740,33 @@ html, body {
   font-size: 13px;
   line-height: 1.5;
 }
+.how-to-play-title {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--cyan);
+}
+.how-to-play-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.how-to-play-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.how-to-play-list .htp-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.how-to-play-list li > span:last-child { flex: 1; }
 @media (min-width: 640px) {
   .settings-overlay { align-items: center; justify-content: center; }
   .settings-drawer { max-width: 480px; border-radius: 16px; max-height: 84vh; }
