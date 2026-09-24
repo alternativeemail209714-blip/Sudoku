@@ -487,7 +487,12 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
     else if (typeof data.text === "string") text = data.text;
     else if (typeof data.message === "string") text = data.message;
     else if (data.content && typeof data.content.text === "string") text = data.content.text;
-    if (text === null) return null;
+    // NOTE: this used to `return null` right here if no text field was
+    // found, which silently discarded the WHOLE event - uniqueId, nickname,
+    // everything - and meant it never showed up anywhere, not even as an
+    // "unparsed" entry. Now we keep going and still return what we found,
+    // with text left null; the caller treats a null text as an unparsed
+    // guess but still counts and displays the event.
 
     // The exact shape of "who sent this" has changed across tiktok-live-
     // connector releases (nested under `.user`, flattened onto the message
@@ -533,7 +538,7 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
     if (!avatarUrl && typeof data.avatarUrl === "string") avatarUrl = data.avatarUrl;
     if (!avatarUrl && typeof data.profilePictureUrl === "string") avatarUrl = data.profilePictureUrl;
 
-    return { text: String(text), uniqueId: String(uniqueId), nickname: String(nickname), avatarUrl: avatarUrl ? String(avatarUrl) : null };
+    return { text: text === null ? null : String(text), uniqueId: String(uniqueId), nickname: String(nickname), avatarUrl: avatarUrl ? String(avatarUrl) : null };
   }
 
   function markActivity() {
@@ -558,16 +563,10 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
   // We previously bet everything on a single event name (WebcastEvent.CHAT,
   // falling back to the literal "chat"). If a future/older library build
   // fires chat messages under a different name than we expect, that single
-  // listener silently never fires - which looks IDENTICAL to the BigInt
-  // logging crash from the host's point of view ("connected", but guesses
-  // do nothing). So we now bind the exact same handler to every plausible
-  // alias: whatever WebcastEvent.CHAT resolves to, the literal "chat", any
-  // other WebcastEvent key with "CHAT" in its name (in case the library
-  // splits normal chat from "system"/"member" chat under a different
-  // constant), and a couple of literal names seen in other library forks.
-  // extractChatFields() already returns null for anything that isn't
-  // actually a chat message, so an alias that turns out to fire for
-  // something else is harmless - it just never produces a parsed guess.
+  // listener silently never fires. So we bind the exact same handler to
+  // every plausible alias: whatever WebcastEvent.CHAT resolves to, the
+  // literal "chat", any other WebcastEvent key with "CHAT" in its name, and
+  // a couple of literal names seen in other library forks.
   function collectChatAliases() {
     var aliases = ["chat"];
     if (WebcastEvent) {
@@ -585,10 +584,8 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
 
   function wireEvents(connection) {
     // Diagnostic: logs the very first time we see each distinct event name
-    // this connection ever emits. This is the fastest way to find out,
-    // beyond any doubt, exactly what this library version calls its chat
-    // event - check the Render logs right after a viewer comments and look
-    // for a line like [TikTok connector] first time seeing event: "...".
+    // this connection ever emits. Confirmed working: Render logs showed
+    // "chat" firing with real WebcastChatMessage payloads.
     try {
       var originalEmit = connection.emit.bind(connection);
       var seenEventNames = {};
@@ -603,10 +600,6 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
       console.error("[TikTok connector] could not install event-name logger - swallowed", e);
     }
 
-    // Guards against listening on multiple aliases ever double-processing
-    // (and double-scoring) the exact same underlying chat message, in the
-    // rare case the library re-emits one message object under more than
-    // one event name.
     var processedChatObjects = typeof WeakSet !== "undefined" ? new WeakSet() : null;
 
     var chatAliases = collectChatAliases();
@@ -616,20 +609,24 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
           if (processedChatObjects.has(data)) return;
           processedChatObjects.add(data);
         }
-      // THE FIX: every incoming chat message used to be logged via
-      // `JSON.stringify(data)` BEFORE the guess was parsed and applied.
-      // TikTok chat payloads routinely contain BigInt fields, and
-      // JSON.stringify() throws on those - which meant this whole handler
-      // threw on essentially every real viewer comment, was swallowed by
-      // the catch block below, and onChat()/extractChatFields() never ran.
-      // That's exactly the "status shows Connected, but guesses never
-      // register" symptom: the connection itself was fine, every chat
-      // event was arriving, but the debug log line was crashing the
-      // handler before the guess could be parsed.
+      // THE REAL BUG, FOUND FROM YOUR LOGS: chat events were confirmed
+      // arriving (you saw "[TikTok raw chat event]" lines), but the
+      // diagnostics counter never moved. That only happens if
+      // extractChatFields() was returning null for every one of them - and
+      // the old code only called onChat()/incremented the counter
+      // `if (extracted)`, so a real, arriving-but-unparseable event was
+      // completely invisible from the UI. There was no way to tell "nothing
+      // is arriving" apart from "things are arriving but failing to parse."
       //
-      // Fix: parse and apply the guess FIRST, each step in its own
-      // try/catch, and do the (now BigInt-safe) debug logging last so a
-      // logging failure can never again block real gameplay.
+      // Fix, in two parts:
+      //   1. extractChatFields() below now NEVER returns null - if it can't
+      //      find comment text, it still returns the uniqueId/nickname it
+      //      found (or "unknown") with text left null, and parseGuess()
+      //      already handles null text fine (reports "unparsed").
+      //   2. onChat() is now called UNCONDITIONALLY for every real event,
+      //      so rawEventCount/lastReceived in the Settings panel will light
+      //      up for every single chat event that reaches this handler -
+      //      giving you a true, unambiguous signal from now on.
       markActivity();
 
       var extracted = null;
@@ -640,7 +637,7 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
       }
 
       try {
-        if (extracted) onChat(extracted);
+        onChat(extracted || { text: null, uniqueId: "unknown", nickname: "unknown", avatarUrl: null });
       } catch (err) {
         console.error("[onChat handler error - swallowed, server kept running]", err);
       }
@@ -649,6 +646,24 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
         onRawEvent(data);
       } catch (err) {
         console.error("[onRawEvent error - swallowed, server kept running]", err);
+      }
+
+      // Untruncated field probe - tells us, beyond doubt, exactly what shape
+      // this library version's chat payload actually has. The old 500-char
+      // JSON.stringify slice was cutting off right after the "common"
+      // metadata block, before ever reaching "comment"/"user" - so it could
+      // never actually prove whether those fields existed or not.
+      try {
+        console.log(
+          "[chat field probe] topLevelKeys=" + JSON.stringify(Object.keys(data || {})) +
+          " typeof(data.comment)=" + typeof (data && data.comment) +
+          " data.comment=" + JSON.stringify(data && data.comment) +
+          " typeof(data.user)=" + typeof (data && data.user) +
+          " userKeys=" + JSON.stringify(data && data.user ? Object.keys(data.user) : null) +
+          " data.user.uniqueId=" + JSON.stringify(data && data.user && data.user.uniqueId)
+        );
+      } catch (err) {
+        console.error("[chat field probe error - swallowed]", err && err.message ? err.message : err);
       }
 
       try {
@@ -972,6 +987,7 @@ function emitPuzzleSolvedIfNeeded(justSolved) {
 var avatarCache = {};
 
 function processComment(text, uniqueId, nickname, source, avatarUrl) {
+  if (text === null || typeof text === "undefined") text = "";
   if (avatarUrl) avatarCache[uniqueId] = avatarUrl;
   var knownAvatar = avatarUrl || avatarCache[uniqueId] || null;
 
