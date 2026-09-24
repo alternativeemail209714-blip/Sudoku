@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: sudoku-live
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: EULERSTREAM_SIGN_API_KEY
+        sync: false
+      # Optional: set to "true" in Render's dashboard only while diagnosing
+      # a chat-parsing issue. Leave unset for normal live use - see
+      # CHANGES.md for why.
+      - key: CHAT_DEBUG_LOG
+        value: "false"
+
+    # ---------------------------------------------------------------------
+    # ALL-TIME LEADERBOARD PERSISTENCE (optional, requires a paid plan)
+    #
+    # By default the server writes the all-time leaderboard to a JSON file
+    # under ./data in its own filesystem, which survives ordinary
+    # spin-down/spin-up cycles but is WIPED on every new deploy, because
+    # Render's free plan filesystem is ephemeral (see CHANGES.md).
+    #
+    # If you want the all-time leaderboard to survive redeploys too,
+    # upgrade this service off the free plan and uncomment the block below
+    # to attach a real Persistent Disk, then set DATA_DIR to its mount
+    # path. Leave both commented out to keep using the free plan with
+    # best-effort (survives restarts, not redeploys) persistence.
+    #
+    # disk:
+    #   name: sudoku-live-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
+    #
+    # envVars (add alongside the ones above):
+    #   - key: DATA_DIR
+    #     value: /var/data
+    # ---------------------------------------------------------------------
