@@ -173,27 +173,47 @@ function drawPuzzle(difficulty) {
 
 // ---------------------------------------------------------------------------
 // 2. CHAT PARSER - recognizes "A5 7" style algebraic-notation guesses.
-//    No "=" sign is required or shown anywhere. Also tolerant of "A5:7",
-//    "A5,7", "A5-7", "A5=7" (in case a viewer types it anyway), and even
-//    "A57" with no separator at all, since real audiences on mobile
-//    keyboards do not always type exactly what the instructions show.
-//    Full-width digits/letters (common on some phone keyboards, especially
-//    in Asia) are normalized to plain ASCII before matching.
+//
+// DESIGN (rewritten to be separator-agnostic instead of separator-enumerated):
+// The old version required the space between the column digit and the
+// number to be one of a hand-picked list of characters (space, comma,
+// colon, equals, hyphen, later period). That list can never be complete -
+// different phones/keyboards/IMEs insert different auto-punctuation
+// (periods, arrows, ellipses, emoji, double spaces, etc.) when a viewer
+// double-taps space or their autocorrect "helps". Any character left off
+// the list meant a perfectly-typed "A5 7" could still come out unparsed.
+//
+// So instead of asking "was the separator one of these N characters?", the
+// parser now asks the more robust question: "ignoring anything that isn't
+// a letter or a digit, is there an A-I followed by two digits 1-9?" -
+// i.e. ANY run of non-alphanumeric characters (or nothing at all) between
+// the row letter and the two digits is accepted as a separator. This
+// covers every separator the old list covered, plus anything else a
+// keyboard, emoji, or copy-paste artifact could ever insert, without
+// needing to keep guessing at new characters to add.
+//
+// It still requires the row letter and the two digits to be genuinely
+// adjacent (only punctuation/symbols/emoji/whitespace between them, never
+// other letters or digits) so it won't start matching unrelated chatter.
+//
+// Full-width digits/letters and invisible formatting characters (common on
+// some phone keyboards/emoji, especially in Asia) are stripped/normalized
+// to plain ASCII before matching.
 // ---------------------------------------------------------------------------
-// NOTE (fix): the separator character classes below now also accept "."
-// as a separator, in addition to space/comma/colon/equals/hyphen. Real-world
-// cause: several mobile keyboards (iOS "." shortcut, some Android Gboard
-// configs) auto-insert a period when a viewer double-taps the space bar
-// mid-message - so a genuinely correctly-typed "A5 7" can arrive at the
-// server as "A5. 7" or "A5.7" purely because of the keyboard's own
-// autocorrect, and used to be rejected as "wrong format" even though the
-// viewer did everything right.
-var CELL_GUESS_REGEX = /\b([A-I])\s*[.\-:,=]?\s*([1-9])[\s.,:=\-]+([1-9])\b/i;
+var NON_ALNUM = "[^A-Za-z0-9]";
+// Row letter, then any junk (or none), then the column digit, then AT LEAST
+// ONE piece of junk (this is what makes it "not the compact form"), then
+// the value digit.
+var CELL_GUESS_REGEX = new RegExp("\\b([A-I])" + NON_ALNUM + "*([1-9])" + NON_ALNUM + "+([1-9])\\b", "i");
+// Compact form: letter immediately followed by exactly two digits, e.g. "A57".
 var CELL_GUESS_COMPACT_REGEX = /\b([A-I])([1-9])([1-9])\b/i;
 
 function normalizeGuessText(text) {
   return text
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    // Zero-width spaces/joiners, BOM, bidi control marks, word joiner,
+    // and emoji variation selectors - all invisible, all seen in the wild
+    // in real chat payloads, none of them should ever break a match.
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060\uFEFF\uFE0E\uFE0F]/g, "")
     .replace(/[\uFF10-\uFF19]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30); })
     .replace(/[\uFF21-\uFF3A]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFF21 + 0x41); })
     .replace(/[\uFF41-\uFF5A]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFF41 + 0x61); });
@@ -214,6 +234,50 @@ function parseGuess(text) {
   if (num < 1 || num > 9) return null;
   return { row: row, col: col - 1, num: num, coordLabel: rowLetter + col };
 }
+
+// ---------------------------------------------------------------------------
+// 2b. SELF-TEST - runs at server startup (not on every request) against a
+//     wide battery of real-world-shaped inputs, so any future edit to the
+//     regexes above that breaks parsing is caught LOUDLY in the logs the
+//     moment the server boots, instead of silently shipping and being
+//     discovered days later from "wrong format" reports. This is the
+//     failsafe: a regression here is a startup-log error, not a mystery.
+// ---------------------------------------------------------------------------
+function runParseGuessSelfTest() {
+  var mustParse = [
+    ["A5 7", "A5", 7], ["a5 7", "A5", 7], ["A5,7", "A5", 7], ["A5:7", "A5", 7],
+    ["A5-7", "A5", 7], ["A5=7", "A5", 7], ["A57", "A5", 7], ["A5.7", "A5", 7],
+    ["A5. 7", "A5", 7], ["A5  7", "A5", 7], ["A5   7.", "A5", 7], ["A5 7!", "A5", 7],
+    ["A5 7?", "A5", 7], ["A5->7", "A5", 7], ["A5...7", "A5", 7], ["A5~7", "A5", 7],
+    ["A5 7 😄", "A5", 7], ["😄A5 7", "A5", 7], ["A5😄7", "A5", 7], [" A5 7 ", "A5", 7],
+    ["row A5 7 please", "A5", 7], ["I9 9", "I9", 9], ["b3 4", "B3", 4],
+    ["A5\t7", "A5", 7], ["A5\n7", "A5", 7], ["my guess: A5 7!!", "A5", 7],
+    ["A5，7", "A5", 7] // full-width comma - falls through to junk class fine
+  ];
+  var mustNotParse = ["hello everyone", "J5 7", "A0 7", "A5 0", "just chatting", ""];
+
+  var failures = 0;
+  mustParse.forEach(function (t) {
+    var res = parseGuess(t[0]);
+    if (!res || res.coordLabel !== t[1] || res.num !== t[2]) {
+      failures++;
+      console.error("[parseGuess self-test FAILED] expected " + JSON.stringify(t) + " got " + JSON.stringify(res));
+    }
+  });
+  mustNotParse.forEach(function (t) {
+    var res = parseGuess(t);
+    if (res) {
+      failures++;
+      console.error("[parseGuess self-test FAILED] expected null for " + JSON.stringify(t) + " got " + JSON.stringify(res));
+    }
+  });
+  if (failures === 0) {
+    console.log("[parseGuess self-test] all " + (mustParse.length + mustNotParse.length) + " cases passed.");
+  } else {
+    console.error("[parseGuess self-test] " + failures + " case(s) FAILED - see above. The chat parser needs attention.");
+  }
+}
+runParseGuessSelfTest();
 
 // ---------------------------------------------------------------------------
 // 3. GAME STATE
@@ -999,11 +1063,24 @@ function processComment(text, uniqueId, nickname, source, avatarUrl) {
   if (avatarUrl) avatarCache[uniqueId] = avatarUrl;
   var knownAvatar = avatarUrl || avatarCache[uniqueId] || null;
 
+  // Parse BEFORE building the diagnostics payload, so the Diagnostics panel
+  // can show exactly what the parser saw and what it did with it - this is
+  // what makes "wrong format" reports debuggable from the screen itself
+  // instead of requiring a trip to the Render server logs.
+  var parsed = parseGuess(text);
+
   game.state.rawEventCount += 1;
-  game.state.lastReceived = { uniqueId: uniqueId, nickname: nickname, text: text, source: source, at: Date.now() };
+  game.state.lastReceived = {
+    uniqueId: uniqueId,
+    nickname: nickname,
+    text: text,
+    source: source,
+    at: Date.now(),
+    parsedCoord: parsed ? parsed.coordLabel : null,
+    parsedNum: parsed ? parsed.num : null
+  };
   io.emit("diagnostics", { rawEventCount: game.state.rawEventCount, lastReceived: game.state.lastReceived });
 
-  var parsed = parseGuess(text);
   if (!parsed) {
     io.emit("guessResult", { uniqueId: uniqueId, nickname: nickname, avatar: knownAvatar, text: text, status: "unparsed" });
     return;
