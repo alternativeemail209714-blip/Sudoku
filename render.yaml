@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: sudoku-live
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: EULERSTREAM_SIGN_API_KEY
+        sync: false
+      # Optional: set to "true" in Render's dashboard only while diagnosing
+      # a chat-parsing issue. Leave unset for normal live use - see
+      # CHANGES.md for why.
+      - key: CHAT_DEBUG_LOG
+        value: "false"
+
+    # ---------------------------------------------------------------------
+    # SCORE STORAGE (v3.0) - keeps the all-time leaderboard AND the round
+    # in progress safe across sleeps, restarts and new deploys.
+    #
+    # RECOMMENDED, FREE: a cloud key-value store reached over HTTPS. Upstash
+    # Redis's free plan works well for this and needs no credit card. Create
+    # one at https://console.upstash.com (Redis -> Create Database -> pick
+    # any region), open its "REST API" tab, and set the two values below on
+    # Render's Environment tab (see README.md for the full walkthrough):
+    #
+    #   UPSTASH_REDIS_REST_URL   = https://xxxxx.upstash.io
+    #   UPSTASH_REDIS_REST_TOKEN = the token shown on the same page
+    #
+    # Without these, the game still works and still saves scores - but ONLY
+    # to a local file, which Render's FREE plan documentation confirms is
+    # erased on every sleep/restart/redeploy. That's the previous behavior.
+    # A paid plan's Persistent Disk (below) is a second way to keep the
+    # local file around; the two can be used together or separately.
+    # ---------------------------------------------------------------------
+    #
+    # Optional: change where the on-disk copy is kept (used together with,
+    # or instead of, the cloud). Requires a paid plan's Persistent Disk to
+    # actually survive redeploys - see the disk block further below.
+    # - key: DATA_DIR
+    #   value: /var/data
+    #
+    # disk:
+    #   name: sudoku-live-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
