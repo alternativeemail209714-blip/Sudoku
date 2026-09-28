@@ -1,6 +1,6 @@
 {
   "name": "tiktok-sudoku-live",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Fully automated interactive TikTok LIVE Sudoku game",
   "main": "server.js",
   "engines": {

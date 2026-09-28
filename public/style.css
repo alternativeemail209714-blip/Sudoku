@@ -857,8 +857,11 @@ html, body {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
+  overflow: hidden;
   object-fit: cover;
+  object-position: center;
   background: var(--given);
   border: 1px solid var(--border);
 }

@@ -689,27 +689,11 @@ function createTikTokConnector(onChat, onStatus, onRawEvent) {
     // for the viewer's profile picture across versions, so we try each of
     // the known spots and fall back to null (the client then draws a
     // generated circular initials avatar instead).
-    var avatarUrl = null;
-    function firstUrl(obj) {
-      if (!obj) return null;
-      if (typeof obj === "string") return obj;
-      if (Array.isArray(obj) && obj.length) return obj[0];
-      if (obj.urlList && obj.urlList.length) return obj.urlList[0];
-      if (obj.url && Array.isArray(obj.url) && obj.url.length) return obj.url[0];
-      if (obj.url && typeof obj.url === "string") return obj.url;
-      if (obj.urls && obj.urls.length) return obj.urls[0];
-      return null;
-    }
-    if (data.user) {
-      avatarUrl = firstUrl(data.user.profilePicture) ||
-        firstUrl(data.user.avatarThumbnail) ||
-        firstUrl(data.user.avatarMedium) ||
-        firstUrl(data.user.avatarLarger) ||
-        (typeof data.user.avatarUrl === "string" ? data.user.avatarUrl : null) ||
-        (typeof data.user.profilePictureUrl === "string" ? data.user.profilePictureUrl : null);
-    }
-    if (!avatarUrl && typeof data.avatarUrl === "string") avatarUrl = data.avatarUrl;
-    if (!avatarUrl && typeof data.profilePictureUrl === "string") avatarUrl = data.profilePictureUrl;
+    // v3.2: pickAvatarUrl() (defined with the avatar proxy below) scans every
+    // known spot AND any field whose name looks like an avatar/profile
+    // picture, then picks the best browser-displayable URL (JPEG > WebP > PNG;
+    // never HEIC, which Chrome/Android WebViews cannot draw).
+    var avatarUrl = pickAvatarUrl(data);
 
     return { text: text === null ? null : String(text), uniqueId: String(uniqueId), nickname: String(nickname), avatarUrl: avatarUrl ? String(avatarUrl) : null };
   }
@@ -1166,25 +1150,24 @@ app.get("/api/alltime-backup", function (req, res) {
 // server request with no cross-site Referer to object to.
 // A small in-memory cache keeps repeat requests (the same viewer guessing
 // several times) cheap and fast without re-fetching TikTok every time.
-var AVATAR_CACHE_MAX_ENTRIES = 500;
-var AVATAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-var AVATAR_FETCH_TIMEOUT_MS = 6000;
+var AVATAR_CACHE_MAX_ENTRIES = 1500;
+var AVATAR_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+var AVATAR_FETCH_TIMEOUT_MS = 8000;
 var AVATAR_MAX_BYTES = 3 * 1024 * 1024; // 3 MB - a profile photo is never this big; refuse anything larger
-var avatarProxyCache = new Map(); // url -> { buf, contentType, ts }
+var avatarById = new Map();    // viewer uniqueId -> { buf, contentType, ts, url }
+var avatarByUrl = new Map();   // photo URL      -> { buf, contentType, ts, url }
+var avatarInflight = new Map(); // key -> Promise (so 5 simultaneous requests = 1 download)
+var avatarLog = [];            // last few outcomes, shown at /avatar-debug
+var avatarExtractLog = [];     // last few "was a photo URL found in the chat event?" results
 
 // Only ever proxy TikTok/ByteDance's own CDN hosts - never an arbitrary
 // URL a viewer's display name or chat text might smuggle in. Anything else
 // is refused outright (this is not a general-purpose open proxy).
 var ALLOWED_AVATAR_HOST_SUFFIXES = [
-  ".tiktokcdn.com",
-  ".tiktokcdn-us.com",
-  ".tiktokcdn-eu.com",
-  ".ibytedtos.com",
-  ".ibyteimg.com",
-  ".byteimg.com",
-  ".muscdn.com",
-  ".tiktokv.com",
-  ".tiktokv.us"
+  ".tiktokcdn.com", ".tiktokcdn-us.com", ".tiktokcdn-eu.com", ".tiktokcdn.eu",
+  ".ibytedtos.com", ".ibyteimg.com", ".byteimg.com", ".muscdn.com",
+  ".tiktokv.com", ".tiktokv.us", ".tiktokv.eu", ".tiktokw.us", ".tiktokw.eu",
+  ".byteoversea.com", ".ttwstatic.com", ".bytecdn.cn", ".pstatp.com", ".douyinpic.com"
 ];
 function isAllowedAvatarHost(hostname) {
   hostname = String(hostname || "").toLowerCase();
@@ -1194,72 +1177,208 @@ function isAllowedAvatarHost(hostname) {
   }
   return false;
 }
-function pruneAvatarCacheIfNeeded() {
-  if (avatarProxyCache.size <= AVATAR_CACHE_MAX_ENTRIES) return;
-  // Drop the oldest entries first (Map preserves insertion order).
-  var toDrop = avatarProxyCache.size - AVATAR_CACHE_MAX_ENTRIES;
-  var it = avatarProxyCache.keys();
+function logAvatar(entry) {
+  entry.t = new Date().toISOString();
+  avatarLog.push(entry);
+  if (avatarLog.length > 60) avatarLog.shift();
+}
+function urlShape(u) {
+  try {
+    var x = new URL(u);
+    return x.hostname + x.pathname.replace(/^(.{0,20}).*(\.[a-z0-9]{2,5})$/i, "$1...$2");
+  } catch (e) { return "(bad url)"; }
+}
+
+// Chooses the single best profile-photo URL out of everything TikTok's
+// event carries. Looks at the well-known fields, then also any nested field
+// whose NAME contains avatar/profile/picture/portrait (so a library update
+// that renames things doesn't silently bring back initials). Badges, frames,
+// stickers and emotes are ignored, and HEIC (which browsers can't draw) is
+// never chosen.
+function pickAvatarUrl(data) {
+  if (!data || typeof data !== "object") return null;
+  var found = [];
+  var KEY_RE = /avatar|profile|picture|portrait/i;
+  function walk(obj, underKey, depth) {
+    if (obj === null || typeof obj === "undefined" || depth > 6) return;
+    if (typeof obj === "string") {
+      if (underKey && /^https?:\/\//i.test(obj)) found.push(obj);
+      return;
+    }
+    if (Array.isArray(obj)) {
+      for (var i = 0; i < obj.length && i < 12; i++) walk(obj[i], underKey, depth + 1);
+      return;
+    }
+    if (typeof obj === "object") {
+      var keys = Object.keys(obj);
+      for (var k = 0; k < keys.length; k++) walk(obj[keys[k]], underKey || KEY_RE.test(keys[k]), depth + 1);
+    }
+  }
+  try { walk(data, false, 0); } catch (e) { /* ignore - fall through to null */ }
+
+  var best = null, bestScore = -1000;
+  found.forEach(function (u) {
+    var host = "";
+    try { host = new URL(u).hostname; } catch (e) { return; }
+    if (!/^https:/i.test(u) && !/^http:/i.test(u)) return;
+    if (!isAllowedAvatarHost(host)) return;
+    var path = u.split("?")[0].toLowerCase();
+    var score = 0;
+    if (/avt|avatar/.test(u)) score += 3;
+    if (/\.jpe?g$/.test(path)) score += 3;
+    else if (/\.webp$/.test(path)) score += 2;
+    else if (/\.png$/.test(path)) score += 1;
+    else if (/\.(heic|heif)$/.test(path)) score -= 50;
+    if (/webcast|badge|sticker|emoji|emote|frame|border|effect|gift/i.test(u)) score -= 50;
+    if (score > bestScore) { bestScore = score; best = u; }
+  });
+  if (bestScore < -10) return null;
+  return best ? best.replace(/^http:/i, "https:") : null;
+}
+
+function sniffImageType(buf) {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0xFF && buf[1] === 0xD8) return "image/jpeg";
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return "image/png";
+  if (buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  if (buf.toString("ascii", 0, 3) === "GIF") return "image/gif";
+  if (buf.toString("ascii", 4, 8) === "ftyp") {
+    var brand = buf.toString("ascii", 8, 12);
+    if (brand === "avif") return "image/avif";
+    return "image/heic"; // heic/heif/etc - not displayable in most browsers
+  }
+  return null;
+}
+
+// Downloads one photo. Tries browser-like headers first (TikTok's CDN can
+// refuse unknown "bot" user-agents), then plain headers as a second try.
+// Redirects are followed by hand so every hop is re-checked against the
+// allow-list.
+async function downloadAvatar(url) {
+  var attempts = [
+    { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Accept": "image/avif,image/webp,image/apng,image/jpeg,image/*,*/*;q=0.8",
+      "Referer": "https://www.tiktok.com/" },
+    { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Accept": "*/*" }
+  ];
+  var lastErr = "no attempt";
+  for (var a = 0; a < attempts.length; a++) {
+    try {
+      var current = url;
+      var res = null;
+      for (var hop = 0; hop < 4; hop++) {
+        var target = new URL(current);
+        if (target.protocol !== "https:" || !isAllowedAvatarHost(target.hostname)) throw new Error("host not allowed: " + target.hostname);
+        var controller = new AbortController();
+        var timer = setTimeout(function () { controller.abort(); }, AVATAR_FETCH_TIMEOUT_MS);
+        try {
+          res = await fetch(target.toString(), { signal: controller.signal, redirect: "manual", headers: attempts[a] });
+        } finally { clearTimeout(timer); }
+        if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
+          current = new URL(res.headers.get("location"), target).toString();
+          continue;
+        }
+        break;
+      }
+      if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "no response"));
+      var ab = await res.arrayBuffer();
+      if (ab.byteLength > AVATAR_MAX_BYTES) throw new Error("too large");
+      var buf = Buffer.from(ab);
+      var type = sniffImageType(buf);
+      if (!type) throw new Error("not an image (content-type " + (res.headers.get("content-type") || "?") + ")");
+      if (type === "image/heic") throw new Error("HEIC photo (browsers cannot display it)");
+      return { buf: buf, contentType: type, ts: Date.now(), url: url };
+    } catch (e) {
+      lastErr = (e && e.message) ? e.message : String(e);
+    }
+  }
+  throw new Error(lastErr);
+}
+
+function pruneMap(map, max) {
+  if (map.size <= max) return;
+  var toDrop = map.size - max;
+  var it = map.keys();
   for (var i = 0; i < toDrop; i++) {
     var k = it.next();
     if (k.done) break;
-    avatarProxyCache.delete(k.value);
+    map.delete(k.value);
   }
+}
+
+// Returns a cached/downloaded photo for a viewer, or null. A photo that was
+// downloaded while its signed URL was still fresh keeps being served from
+// memory after the URL itself has expired.
+async function getAvatar(id, url) {
+  var byId = id ? avatarById.get(id) : null;
+  if (byId && (Date.now() - byId.ts) < AVATAR_CACHE_TTL_MS && (!url || byId.url === url || true)) return byId;
+  if (url) {
+    var byUrl = avatarByUrl.get(url);
+    if (byUrl && (Date.now() - byUrl.ts) < AVATAR_CACHE_TTL_MS) {
+      if (id) avatarById.set(id, byUrl);
+      return byUrl;
+    }
+    var key = url;
+    var job = avatarInflight.get(key);
+    if (!job) {
+      job = downloadAvatar(url).then(function (entry) {
+        avatarByUrl.set(url, entry);
+        if (id) { avatarById.delete(id); avatarById.set(id, entry); }
+        pruneMap(avatarByUrl, AVATAR_CACHE_MAX_ENTRIES);
+        pruneMap(avatarById, AVATAR_CACHE_MAX_ENTRIES);
+        logAvatar({ id: id || null, ok: true, src: urlShape(url), type: entry.contentType, bytes: entry.buf.length });
+        return entry;
+      }).finally(function () { avatarInflight.delete(key); });
+      avatarInflight.set(key, job);
+    }
+    try {
+      return await job;
+    } catch (e) {
+      logAvatar({ id: id || null, ok: false, src: urlShape(url), error: (e && e.message) || String(e) });
+      if (byId) return byId; // stale copy beats no copy
+      return null;
+    }
+  }
+  return byId || null;
+}
+
+// Fire-and-forget: download the photo the moment a viewer comments, so it
+// is already sitting in memory when the guess toast asks for it.
+function prefetchAvatar(id, url) {
+  if (!url) return;
+  getAvatar(id, url).catch(function () { /* logged inside */ });
 }
 
 app.get("/avatar", async function (req, res) {
   try {
-    var raw = req.query.u;
-    if (!raw || typeof raw !== "string") return res.status(400).end();
-    var target;
-    try {
-      target = new URL(raw);
-    } catch (e) {
-      return res.status(400).end();
+    var url = (typeof req.query.u === "string" && req.query.u) ? req.query.u : null;
+    var id = (typeof req.query.id === "string" && req.query.id) ? req.query.id.slice(0, 100) : null;
+    if (!url && !id) return res.status(400).end();
+    if (url) {
+      var target;
+      try { target = new URL(url); } catch (e) { return res.status(400).end(); }
+      if (target.protocol !== "https:" || !isAllowedAvatarHost(target.hostname)) return res.status(403).end();
     }
-    if (target.protocol !== "https:" || !isAllowedAvatarHost(target.hostname)) {
-      return res.status(403).end();
-    }
-
-    var cached = avatarProxyCache.get(raw);
-    if (cached && (Date.now() - cached.ts) < AVATAR_CACHE_TTL_MS) {
-      res.setHeader("Content-Type", cached.contentType);
-      res.setHeader("Cache-Control", "public, max-age=21600"); // 6h - a phone/browser can reuse this itself too
-      return res.end(cached.buf);
-    }
-
-    var controller = new AbortController();
-    var timeout = setTimeout(function () { controller.abort(); }, AVATAR_FETCH_TIMEOUT_MS);
-    var upstream;
-    try {
-      upstream = await fetch(target.toString(), {
-        signal: controller.signal,
-        redirect: "follow",
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; TikTokSudokuLive/1.0)" }
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!upstream || !upstream.ok) return res.status(502).end();
-    var contentType = upstream.headers.get("content-type") || "";
-    if (contentType.indexOf("image/") !== 0) return res.status(415).end();
-
-    var arrayBuf = await upstream.arrayBuffer();
-    if (arrayBuf.byteLength > AVATAR_MAX_BYTES) return res.status(413).end();
-    var buf = Buffer.from(arrayBuf);
-
-    avatarProxyCache.set(raw, { buf: buf, contentType: contentType, ts: Date.now() });
-    pruneAvatarCacheIfNeeded();
-
-    res.setHeader("Content-Type", contentType);
+    var entry = await getAvatar(id, url);
+    if (!entry) return res.status(404).end();
+    res.setHeader("Content-Type", entry.contentType);
     res.setHeader("Cache-Control", "public, max-age=21600");
-    res.end(buf);
+    res.end(entry.buf);
   } catch (err) {
-    // Any failure (timeout, DNS, aborted, etc.) just means "no photo" -
-    // the frontend already falls back to the generated initials avatar
-    // whenever an <img> fails to load, so a plain error status is enough.
     res.status(502).end();
   }
+});
+
+// Open this in a browser tab while a viewer comments to see, per viewer,
+// whether a photo URL was found and whether it downloaded.
+app.get("/avatar-debug", function (req, res) {
+  res.setHeader("Content-Type", "application/json");
+  res.send(JSON.stringify({
+    cachedPhotos: avatarById.size,
+    recentExtractions: avatarExtractLog,
+    recentDownloads: avatarLog
+  }, null, 1));
 });
 
 // Cache-Control headers below make sure that every time you redeploy, phones
@@ -2023,6 +2142,9 @@ function processComment(text, uniqueId, nickname, source, avatarUrl) {
   uniqueId = safeId(uniqueId);
   if (avatarUrl) avatarCache[uniqueId] = avatarUrl;
   var knownAvatar = avatarUrl || avatarCache[uniqueId] || null;
+  avatarExtractLog.push({ id: uniqueId, source: source, photoUrlFound: !!avatarUrl, src: avatarUrl ? urlShape(avatarUrl) : null });
+  if (avatarExtractLog.length > 40) avatarExtractLog.shift();
+  if (knownAvatar) prefetchAvatar(uniqueId, knownAvatar);
 
   // Parse BEFORE building the diagnostics payload, so the Diagnostics panel
   // can show exactly what the parser saw and what it did with it - this is

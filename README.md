@@ -180,3 +180,11 @@ project/
     game.js
     style.css
 ```
+
+## Profile photos (v3.2)
+
+Each viewer's real TikTok profile photo is downloaded by the server and shown
+in a circle next to their name (toast, both leaderboards, scoreboard, round-end
+popups). If a photo doesn't appear, open `https://YOUR-APP.onrender.com/avatar-debug`
+while that viewer comments to see whether TikTok sent a photo URL and whether
+the download succeeded.

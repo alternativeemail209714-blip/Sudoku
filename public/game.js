@@ -326,22 +326,27 @@
   // fetches the real photo server-to-server and re-serves it same-origin,
   // so the exact, correct circular TikTok profile photo shows up reliably
   // instead of quietly falling back to the generated placeholder every time.
-  function proxiedAvatarUrl(avatarUrl) {
-    if (!avatarUrl) return null;
-    return "/avatar?u=" + encodeURIComponent(avatarUrl);
+  function proxiedAvatarUrl(avatarUrl, uniqueId) {
+    if (!avatarUrl && !uniqueId) return null;
+    var q = [];
+    if (uniqueId) q.push("id=" + encodeURIComponent(uniqueId));
+    if (avatarUrl) q.push("u=" + encodeURIComponent(avatarUrl));
+    return "/avatar?" + q.join("&");
   }
   function makeAvatarImg(avatarUrl, uniqueId, name, sizeClass) {
     var img = document.createElement("img");
     img.className = "avatar-circle" + (sizeClass ? " " + sizeClass : "");
     img.alt = "";
-    img.loading = "lazy";
+    img.decoding = "async";
     img.referrerPolicy = "no-referrer";
     var fallback = generatedAvatarDataUri(uniqueId, name);
-    var proxied = proxiedAvatarUrl(avatarUrl);
+    // The server remembers each viewer's downloaded photo by their id, so
+    // even when the saved TikTok URL has expired (older all-time entries)
+    // the photo still shows as long as the server has seen them this session.
+    var proxied = proxiedAvatarUrl(avatarUrl, uniqueId);
     img.src = proxied || fallback;
-    // The proxy itself can occasionally fail too (TikTok CDN outage, an
-    // expired signed URL, a network hiccup) - fall back to the generated
-    // avatar instead of showing a broken image icon, same as before.
+    // If the photo genuinely can't be loaded, show the generated initials
+    // circle instead of a broken-image icon.
     img.addEventListener("error", function () {
       if (img.src !== fallback) img.src = fallback;
     });

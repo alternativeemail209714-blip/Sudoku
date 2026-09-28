@@ -1,3 +1,36 @@
+# v3.2.0 — real TikTok profile photos, made reliable (second pass)
+
+v3.1.0 routed photos through a server-side proxy but viewers could still end
+up with initials circles. This build fixes the remaining causes:
+
+1. **Proxy was identifying itself as a bot.** The photo download now sends
+   normal browser headers (and a tiktok.com Referer), then retries with
+   plain headers before giving up.
+2. **Photos served as generic binary were rejected.** The old check demanded
+   an `image/*` Content-Type. The proxy now recognises JPEG/PNG/WebP/GIF/AVIF
+   from the file's own bytes.
+3. **HEIC variants.** TikTok often lists a HEIC copy first, which browsers
+   cannot display. The picker now chooses a JPEG (then WebP/PNG) copy.
+4. **Photo URL not found in the chat event.** Extraction now also scans any
+   nested field named avatar/profile/picture/portrait, ignoring badges,
+   frames and stickers, so library shape changes don't drop photos.
+5. **Expiring URLs.** Photos are downloaded the moment a viewer comments and
+   kept in server memory by viewer id (12 h, up to 1500 viewers), so they still
+   show after TikTok's signed link expires - including in the leaderboards.
+6. **Safer proxy.** Redirects are followed by hand and every hop is checked
+   against the TikTok/ByteDance host allow-list.
+7. Images are no longer lazy-loaded (toasts could miss loading), and the
+   circle is enforced with `aspect-ratio` + `overflow: hidden`.
+
+Diagnostics: open `/avatar-debug` on your site while someone comments. It shows
+whether a photo URL was found for each viewer and whether the download worked.
+
+Known limit: all-time leaderboard entries from an earlier session whose photo
+link has expired show initials until that viewer comments again (the server
+has no copy yet).
+
+---
+
 # v3.1.0 — real TikTok profile photos now load reliably, everywhere they're shown
 
 ## The bug
