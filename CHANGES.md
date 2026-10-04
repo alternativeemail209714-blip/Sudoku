@@ -1,3 +1,19 @@
+# v3.3.0 — knitted board frame
+
+The outermost edge of the big board (the border enclosing all the numbers) is
+now drawn as rows of knit stitches.
+
+- The yarn color is chosen separately from the color theme: Settings >
+  "Knitted board frame". **Auto** picks a yarn that contrasts the current
+  theme (and follows it when you change theme); or pick Crimson, Mustard,
+  Teal, Forest, Plum, Navy, Orange or Cream.
+- A checkbox in the same card turns the knit frame off (back to the plain
+  border). Both choices are remembered on this device.
+- The 3x3 box dividers inside the board still use the theme color.
+- No server changes.
+
+---
+
 # v3.2.0 — real TikTok profile photos, made reliable (second pass)
 
 v3.1.0 routed photos through a server-side proxy but viewers could still end

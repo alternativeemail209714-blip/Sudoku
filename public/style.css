@@ -1142,3 +1142,43 @@ html, body {
 .storage-status.storage-warn { border-color: var(--warning); }
 .storage-box .hint[hidden] { display: none; }
 .btn-link { text-decoration: none; text-align: center; display: inline-block; box-sizing: border-box; }
+
+
+/* ---- Knitted board frame -------------------------------------------------
+   The outermost edge of the big board (the border that encloses all the
+   numbers) is drawn as rows of knit stitches. The yarn color is chosen
+   separately from the color theme (Settings > Knitted board frame), so the
+   threads never have to match the theme's accent colors. game.js builds the
+   stitch tile for the chosen yarn and sets it as --knit-img. */
+:root { --knit-w: 16px; }
+:root[data-knit="on"] .sudoku-grid {
+  border: var(--knit-w) solid transparent;
+  border-radius: 14px;
+  background-color: transparent;
+  background-image: linear-gradient(var(--border), var(--border)), var(--knit-img, none);
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  background-size: auto, var(--knit-w) var(--knit-w);
+  background-repeat: no-repeat, repeat;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.30);
+}
+@media (min-width: 900px) {
+  .app-shell:fullscreen,
+  .app-shell:-webkit-full-screen { --knit-w: 22px; }
+}
+.knit-row .knit-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.knit-row .knit-sub { font-size: 12.5px; font-weight: 500; color: var(--text-dim); }
+.yarn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.yarn-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-input); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 7px 8px; cursor: pointer; font-size: 12px; text-align: left;
+}
+.yarn-btn.active {
+  border-color: var(--pink); background: var(--legend-bg);
+  font-weight: 700; box-shadow: inset 0 0 0 1px var(--pink);
+}
+.yarn-dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; border: 1px solid rgba(0,0,0,.25); }
+.yarn-auto { background: conic-gradient(#d63a4a, #e0a31c, #3f8f3f, #1f9d8f, #2b5bb8, #8a3fb0, #d63a4a); }
+@media (max-width: 380px) { .yarn-grid { grid-template-columns: repeat(2, 1fr); } }
