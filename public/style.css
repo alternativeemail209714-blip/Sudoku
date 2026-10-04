@@ -1146,60 +1146,66 @@ html, body {
 
 /* =====================================================================
    KNIT FRAME - the big box that encloses all the numbers
-   The outer frame of the board is a knitted band (rows of interlocking
-   V-stitches), worked in 2-row stripes of two yarns. The yarns are
-   deliberately NOT the color theme: each theme gets its own contrasting
-   pair (--knit-a / --knit-b). Technique taken from the CRAFT platform's
-   knit frame; only the knitting look is used here.
+   Learned from the WORD SHUFFLE game's knitting look: rows of little
+   "V" stitches (same V shape and 22:28 stitch rhythm), a stitched dashed
+   seam, and soft yarn shading. As in Word Shuffle, the yarn follows the
+   color theme - every theme has its own yarn color - but it is a deeper,
+   more saturated shade than the theme's background, so the knitting
+   always pops out of it.
+   --knit  = the yarn color of the stitches
+   --knit-back = the darker wool that shows between the stitches
    ===================================================================== */
-:root                       { --knit-a:#F2A93B; --knit-b:#4C7DF0; }  /* amber + blue      on dark     */
+:root                        { --knit:#F2B544; }   /* Dark      -> golden yarn      */
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) { --knit-a:#3E6FD1; --knit-b:#F2A900; }  /* blue + gold on light (auto) */
+  :root:not([data-theme="dark"]) { --knit:#3B5BDB; }  /* Light (auto) -> royal blue */
 }
-:root[data-theme="dark"]     { --knit-a:#F2A93B; --knit-b:#4C7DF0; }
-:root[data-theme="light"]    { --knit-a:#3E6FD1; --knit-b:#F2A900; }  /* blue + gold        on light    */
-:root[data-theme="cream"]    { --knit-a:#D1495B; --knit-b:#2A9D8F; }  /* rose + teal        on cream    */
-:root[data-theme="sky"]      { --knit-a:#F28C28; --knit-b:#D6336C; }  /* orange + raspberry on sky blue */
-:root[data-theme="meadow"]   { --knit-a:#D6336C; --knit-b:#F2A900; }  /* raspberry + gold   on meadow   */
-:root[data-theme="blossom"]  { --knit-a:#2A9D8F; --knit-b:#4C5FD5; }  /* teal + indigo      on blossom  */
-:root[data-theme="lavender"] { --knit-a:#F2A93B; --knit-b:#2FB380; }  /* amber + mint       on lavender */
-:root[data-theme="honey"]    { --knit-a:#3E6FD1; --knit-b:#C2415D; }  /* blue + cranberry   on honey    */
+:root[data-theme="dark"]     { --knit:#F2B544; }
+:root[data-theme="light"]    { --knit:#3B5BDB; }   /* Light     -> royal blue yarn  */
+:root[data-theme="cream"]    { --knit:#E0602F; }   /* Cream     -> terracotta wool  */
+:root[data-theme="sky"]      { --knit:#1F86C7; }   /* Sky Blue  -> denim-blue wool  */
+:root[data-theme="meadow"]   { --knit:#3F9B34; }   /* Meadow    -> moss-green wool  */
+:root[data-theme="blossom"]  { --knit:#D9468E; }   /* Blossom   -> rose-pink wool   */
+:root[data-theme="lavender"] { --knit:#8650D6; }   /* Lavender  -> violet wool      */
+:root[data-theme="honey"]    { --knit:#DC8F0F; }   /* Honey     -> amber wool       */
 
 .sudoku-grid {
-  --knit-w: 18px;                          /* thickness of the knitted band */
-  --knit-dark: color-mix(in srgb, var(--knit-a) 35%, #000);
+  --knit-w: clamp(18px, 5vw, 26px);                      /* thickness of the knitted band */
+  --st: calc(var(--knit-w) / 2);                          /* stitch width: 2 stitches across the band */
+  --knit-back: color-mix(in srgb, var(--knit) 38%, #000); /* dark wool between stitches */
+  --knit-hi:   color-mix(in srgb, var(--knit) 45%, #fff); /* highlight on the yarn */
   position: relative;
-  padding: calc(var(--knit-w) + 3px);      /* band + a small gap before the first cell */
-  background: var(--knit-dark);            /* shows in the tiny gaps between stitches */
+  padding: calc(var(--knit-w) + 4px);
+  background: var(--knit-back);
   border: none;
-  border-radius: 14px;
-  box-shadow: 0 0 0 2px var(--knit-dark), 0 8px 18px rgba(0, 0, 0, 0.28);
+  border-radius: 16px;
+  box-shadow: 0 0 0 2px var(--knit-back), 0 8px 18px rgba(0, 0, 0, 0.30);
   isolation: isolate;
 }
 @media (min-width: 900px) {
   .app-shell:fullscreen .sudoku-grid,
-  .app-shell:-webkit-full-screen .sudoku-grid { --knit-w: 24px; }
+  .app-shell:-webkit-full-screen .sudoku-grid { --knit-w: 30px; }
 }
 
-/* the stitches: V-shaped mask filled with two striped yarns + yarn shading */
+/* the stitches: Word Shuffle's "V" knit stitch, staggered in rows, in yarn color
+   with a lit left side, a shaded right side and a little shadow under each stitch */
 .sudoku-grid::before {
   content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: 0; pointer-events: none;
   background:
     linear-gradient(90deg,
-      rgba(0,0,0,.30) 0%, rgba(255,255,255,.26) 22%, rgba(0,0,0,.14) 50%,
-      rgba(255,255,255,.26) 78%, rgba(0,0,0,.30) 100%) 0 0 / 10px 12px,
-    linear-gradient(180deg, rgba(255,255,255,.18), rgba(0,0,0,.12)) 0 0 / 10px 12px,
-    repeating-linear-gradient(180deg, var(--knit-a) 0 24px, var(--knit-b) 24px 48px);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='12' viewBox='0 0 10 12'%3E%3Cpath d='M1.4 1.2 L5 10.4 L8.6 1.2' fill='none' stroke='%23000' stroke-width='3.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 0 0 / 10px 12px repeat;
-          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='12' viewBox='0 0 10 12'%3E%3Cpath d='M1.4 1.2 L5 10.4 L8.6 1.2' fill='none' stroke='%23000' stroke-width='3.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 0 0 / 10px 12px repeat;
+      rgba(0,0,0,.22) 0%, rgba(255,255,255,.34) 26%, rgba(255,255,255,.06) 52%,
+      rgba(0,0,0,.20) 100%) 0 0 / var(--st) calc(var(--st) * 1.2727),
+    var(--knit);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='28' viewBox='0 0 22 28'%3E%3Cg fill='none' stroke='%23000' stroke-width='4.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 3 L11 14 L18.4 3'/%3E%3Cpath d='M3.6 17 L11 28 L18.4 17'/%3E%3C/g%3E%3C/svg%3E") 0 0 / var(--st) calc(var(--st) * 1.2727) repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='28' viewBox='0 0 22 28'%3E%3Cg fill='none' stroke='%23000' stroke-width='4.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 3 L11 14 L18.4 3'/%3E%3Cpath d='M3.6 17 L11 28 L18.4 17'/%3E%3C/g%3E%3C/svg%3E") 0 0 / var(--st) calc(var(--st) * 1.2727) repeat;
 }
 
 /* the inner panel the numbers sit on (its color is the thin cell-divider
-   color), with a little stitched-seam edge */
+   color) with a stitched dashed seam, like Word Shuffle's stitched edges */
 .sudoku-grid::after {
-  content: ""; position: absolute; inset: var(--knit-w); border-radius: 8px; z-index: 1; pointer-events: none;
+  content: ""; position: absolute; inset: var(--knit-w); border-radius: 9px; z-index: 1; pointer-events: none;
   background: var(--border);
-  box-shadow: 0 0 0 2px var(--knit-dark);
+  border: 2px dashed var(--knit-hi);
+  box-shadow: 0 0 0 2px var(--knit-back), inset 0 2px 6px rgba(0, 0, 0, 0.14);
 }
 
 /* cells and labels sit above the panel */

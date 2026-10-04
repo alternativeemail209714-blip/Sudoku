@@ -1,14 +1,16 @@
-# v3.4.0 — knitted board frame (CRAFT platform knit style)
+# v3.5.0 — knitted board frame, Word Shuffle style
 
 The outermost edge of the big board (the border enclosing all the numbers) is
-now a knitted band: rows of interlocking V-stitches worked in 2-row stripes of
-two yarns, using the same technique as the CRAFT platform's knit frame.
+now a knitted band in the style of the WORD SHUFFLE game: rows of "V" stitches,
+yarn shading and a stitched dashed seam.
 
-- Yarn colors are NOT the color theme: every theme has its own contrasting
-  pair of yarns (rose + teal on Cream, orange + raspberry on Sky Blue, etc.),
-  and they change automatically when the theme changes.
-- Only the knitting look was taken from CRAFT. Nothing else of that platform
-  was added. CSS only: no changes to game.js, index.html or the server.
+- The yarn color follows the color theme (golden on Dark, royal blue on Light,
+  terracotta on Cream, denim blue on Sky Blue, moss green on Meadow, rose on
+  Blossom, violet on Lavender, amber on Honey) and changes automatically when
+  you change theme - but it is a deeper, more saturated shade than the theme's
+  background, so the knitting always pops out of it.
+- Only the knit frame was taken from Word Shuffle. CSS only: no changes to
+  game.js, index.html or the server.
 - The 3x3 box dividers inside the board still use the theme color.
 
 ---
