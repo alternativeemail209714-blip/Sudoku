@@ -1,16 +1,15 @@
-# v3.3.0 — knitted board frame
+# v3.4.0 — knitted board frame (CRAFT platform knit style)
 
 The outermost edge of the big board (the border enclosing all the numbers) is
-now drawn as rows of knit stitches.
+now a knitted band: rows of interlocking V-stitches worked in 2-row stripes of
+two yarns, using the same technique as the CRAFT platform's knit frame.
 
-- The yarn color is chosen separately from the color theme: Settings >
-  "Knitted board frame". **Auto** picks a yarn that contrasts the current
-  theme (and follows it when you change theme); or pick Crimson, Mustard,
-  Teal, Forest, Plum, Navy, Orange or Cream.
-- A checkbox in the same card turns the knit frame off (back to the plain
-  border). Both choices are remembered on this device.
+- Yarn colors are NOT the color theme: every theme has its own contrasting
+  pair of yarns (rose + teal on Cream, orange + raspberry on Sky Blue, etc.),
+  and they change automatically when the theme changes.
+- Only the knitting look was taken from CRAFT. Nothing else of that platform
+  was added. CSS only: no changes to game.js, index.html or the server.
 - The 3x3 box dividers inside the board still use the theme color.
-- No server changes.
 
 ---
 

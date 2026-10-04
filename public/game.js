@@ -59,7 +59,6 @@
       document.documentElement.removeAttribute("data-theme");
     }
     updateThemeUI(theme);
-    if (yarnButtons) applyKnit(); // skipped during early init, applyKnit() runs once below
   }
 
   function getEffectiveThemeKey() {
@@ -91,74 +90,6 @@
       updateThemeUI(getEffectiveThemeKey());
     }
   })();
-
-  // ---- Knitted board frame ----------------------------------------------
-  // The outer edge of the board is drawn as knit stitches. Yarn color is its
-  // own setting ("auto" picks a yarn that contrasts the current color theme)
-  // so the threads are never forced to match the theme.
-  var KNIT_ON_KEY = "sudokuLiveKnit";
-  var YARN_KEY = "sudokuLiveYarn";
-  var YARN_COLORS = {
-    crimson: "#d63a4a", mustard: "#e0a31c", teal: "#1f9d8f", forest: "#3f8f3f",
-    plum: "#8a3fb0", navy: "#2b5bb8", orange: "#ee7a2a", cream: "#efe3c8"
-  };
-  // Auto yarn per color theme: always a different hue from that theme's accents.
-  var AUTO_YARN = {
-    dark: "mustard", light: "navy", cream: "teal", sky: "orange",
-    meadow: "crimson", blossom: "forest", lavender: "mustard", honey: "navy"
-  };
-  var knitToggleEl = document.getElementById("knitToggle");
-  var yarnButtons = document.querySelectorAll(".yarn-btn");
-  var yarnChoice = "auto";
-  try { yarnChoice = localStorage.getItem(YARN_KEY) || "auto"; } catch (e) { /* ignore */ }
-  if (yarnChoice !== "auto" && !YARN_COLORS[yarnChoice]) yarnChoice = "auto";
-
-  function shade(hex, amt) { // amt -1..1 : toward black / white
-    var n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
-    var t = amt < 0 ? 0 : 255, p = Math.abs(amt);
-    r = Math.round((t - r) * p + r); g = Math.round((t - g) * p + g); b = Math.round((t - b) * p + b);
-    return "rgb(" + r + "," + g + "," + b + ")";
-  }
-  function buildKnitTile(hex) {
-    var dark = shade(hex, -0.45), mid = shade(hex, -0.22), light = shade(hex, 0.38);
-    function leg(x1, y1, x2, y2) {
-      var d = "M" + x1 + " " + y1 + "L" + x2 + " " + y2;
-      return '<path d="' + d + '" stroke="' + dark + '" stroke-width="8.2" stroke-linecap="round" fill="none"/>' +
-             '<path d="' + d + '" stroke="' + hex + '" stroke-width="6.4" stroke-linecap="round" fill="none"/>' +
-             '<path d="' + d + '" stroke="' + mid + '" stroke-width="1.2" stroke-linecap="round" fill="none" transform="translate(1.5 0)" opacity=".7"/>' +
-             '<path d="' + d + '" stroke="' + light + '" stroke-width="1.5" stroke-linecap="round" fill="none" transform="translate(-1.1 0)"/>';
-    }
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">' +
-      '<rect width="16" height="16" fill="' + dark + '"/>' +
-      leg(2.6, -2, 8, 14) + leg(13.4, -2, 8, 14) + '</svg>';
-    return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
-  }
-  function applyKnit() {
-    var root = document.documentElement;
-    var on = true;
-    try { on = localStorage.getItem(KNIT_ON_KEY) !== "off"; } catch (e) { /* ignore */ }
-    if (knitToggleEl) knitToggleEl.checked = on;
-    if (on) root.setAttribute("data-knit", "on"); else root.removeAttribute("data-knit");
-    var key = yarnChoice === "auto" ? (AUTO_YARN[getEffectiveThemeKey()] || "mustard") : yarnChoice;
-    root.style.setProperty("--knit-img", buildKnitTile(YARN_COLORS[key]));
-    yarnButtons.forEach(function (b) {
-      b.classList.toggle("active", b.getAttribute("data-yarn") === yarnChoice);
-    });
-  }
-  if (knitToggleEl) {
-    knitToggleEl.addEventListener("change", function () {
-      try { localStorage.setItem(KNIT_ON_KEY, knitToggleEl.checked ? "on" : "off"); } catch (e) { /* ignore */ }
-      applyKnit();
-    });
-  }
-  yarnButtons.forEach(function (b) {
-    b.addEventListener("click", function () {
-      yarnChoice = b.getAttribute("data-yarn");
-      try { localStorage.setItem(YARN_KEY, yarnChoice); } catch (e) { /* ignore */ }
-      applyKnit();
-    });
-  });
-  applyKnit();
 
   // ---- Top-toolbar custom dropdowns (generic open/close machinery) -------
   // Shared by the difficulty dropdown and the theme dropdown: only one can

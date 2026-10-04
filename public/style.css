@@ -1144,41 +1144,63 @@ html, body {
 .btn-link { text-decoration: none; text-align: center; display: inline-block; box-sizing: border-box; }
 
 
-/* ---- Knitted board frame -------------------------------------------------
-   The outermost edge of the big board (the border that encloses all the
-   numbers) is drawn as rows of knit stitches. The yarn color is chosen
-   separately from the color theme (Settings > Knitted board frame), so the
-   threads never have to match the theme's accent colors. game.js builds the
-   stitch tile for the chosen yarn and sets it as --knit-img. */
-:root { --knit-w: 16px; }
-:root[data-knit="on"] .sudoku-grid {
-  border: var(--knit-w) solid transparent;
+/* =====================================================================
+   KNIT FRAME - the big box that encloses all the numbers
+   The outer frame of the board is a knitted band (rows of interlocking
+   V-stitches), worked in 2-row stripes of two yarns. The yarns are
+   deliberately NOT the color theme: each theme gets its own contrasting
+   pair (--knit-a / --knit-b). Technique taken from the CRAFT platform's
+   knit frame; only the knitting look is used here.
+   ===================================================================== */
+:root                       { --knit-a:#F2A93B; --knit-b:#4C7DF0; }  /* amber + blue      on dark     */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) { --knit-a:#3E6FD1; --knit-b:#F2A900; }  /* blue + gold on light (auto) */
+}
+:root[data-theme="dark"]     { --knit-a:#F2A93B; --knit-b:#4C7DF0; }
+:root[data-theme="light"]    { --knit-a:#3E6FD1; --knit-b:#F2A900; }  /* blue + gold        on light    */
+:root[data-theme="cream"]    { --knit-a:#D1495B; --knit-b:#2A9D8F; }  /* rose + teal        on cream    */
+:root[data-theme="sky"]      { --knit-a:#F28C28; --knit-b:#D6336C; }  /* orange + raspberry on sky blue */
+:root[data-theme="meadow"]   { --knit-a:#D6336C; --knit-b:#F2A900; }  /* raspberry + gold   on meadow   */
+:root[data-theme="blossom"]  { --knit-a:#2A9D8F; --knit-b:#4C5FD5; }  /* teal + indigo      on blossom  */
+:root[data-theme="lavender"] { --knit-a:#F2A93B; --knit-b:#2FB380; }  /* amber + mint       on lavender */
+:root[data-theme="honey"]    { --knit-a:#3E6FD1; --knit-b:#C2415D; }  /* blue + cranberry   on honey    */
+
+.sudoku-grid {
+  --knit-w: 18px;                          /* thickness of the knitted band */
+  --knit-dark: color-mix(in srgb, var(--knit-a) 35%, #000);
+  position: relative;
+  padding: calc(var(--knit-w) + 3px);      /* band + a small gap before the first cell */
+  background: var(--knit-dark);            /* shows in the tiny gaps between stitches */
+  border: none;
   border-radius: 14px;
-  background-color: transparent;
-  background-image: linear-gradient(var(--border), var(--border)), var(--knit-img, none);
-  background-origin: padding-box, border-box;
-  background-clip: padding-box, border-box;
-  background-size: auto, var(--knit-w) var(--knit-w);
-  background-repeat: no-repeat, repeat;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.30);
+  box-shadow: 0 0 0 2px var(--knit-dark), 0 8px 18px rgba(0, 0, 0, 0.28);
+  isolation: isolate;
 }
 @media (min-width: 900px) {
-  .app-shell:fullscreen,
-  .app-shell:-webkit-full-screen { --knit-w: 22px; }
+  .app-shell:fullscreen .sudoku-grid,
+  .app-shell:-webkit-full-screen .sudoku-grid { --knit-w: 24px; }
 }
-.knit-row .knit-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
-.knit-row .knit-sub { font-size: 12.5px; font-weight: 500; color: var(--text-dim); }
-.yarn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.yarn-btn {
-  display: flex; align-items: center; gap: 6px;
-  background: var(--bg-input); color: var(--text);
-  border: 1px solid var(--border); border-radius: 10px;
-  padding: 7px 8px; cursor: pointer; font-size: 12px; text-align: left;
+
+/* the stitches: V-shaped mask filled with two striped yarns + yarn shading */
+.sudoku-grid::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: 0; pointer-events: none;
+  background:
+    linear-gradient(90deg,
+      rgba(0,0,0,.30) 0%, rgba(255,255,255,.26) 22%, rgba(0,0,0,.14) 50%,
+      rgba(255,255,255,.26) 78%, rgba(0,0,0,.30) 100%) 0 0 / 10px 12px,
+    linear-gradient(180deg, rgba(255,255,255,.18), rgba(0,0,0,.12)) 0 0 / 10px 12px,
+    repeating-linear-gradient(180deg, var(--knit-a) 0 24px, var(--knit-b) 24px 48px);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='12' viewBox='0 0 10 12'%3E%3Cpath d='M1.4 1.2 L5 10.4 L8.6 1.2' fill='none' stroke='%23000' stroke-width='3.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 0 0 / 10px 12px repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='12' viewBox='0 0 10 12'%3E%3Cpath d='M1.4 1.2 L5 10.4 L8.6 1.2' fill='none' stroke='%23000' stroke-width='3.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 0 0 / 10px 12px repeat;
 }
-.yarn-btn.active {
-  border-color: var(--pink); background: var(--legend-bg);
-  font-weight: 700; box-shadow: inset 0 0 0 1px var(--pink);
+
+/* the inner panel the numbers sit on (its color is the thin cell-divider
+   color), with a little stitched-seam edge */
+.sudoku-grid::after {
+  content: ""; position: absolute; inset: var(--knit-w); border-radius: 8px; z-index: 1; pointer-events: none;
+  background: var(--border);
+  box-shadow: 0 0 0 2px var(--knit-dark);
 }
-.yarn-dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; border: 1px solid rgba(0,0,0,.25); }
-.yarn-auto { background: conic-gradient(#d63a4a, #e0a31c, #3f8f3f, #1f9d8f, #2b5bb8, #8a3fb0, #d63a4a); }
-@media (max-width: 380px) { .yarn-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* cells and labels sit above the panel */
+.sudoku-grid > * { position: relative; z-index: 2; }
