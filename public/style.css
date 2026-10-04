@@ -1146,20 +1146,21 @@ html, body {
 
 /* =====================================================================
    KNIT FRAME - the big box that encloses all the numbers
-   Learned from the WORD SHUFFLE game's knitting look: rows of little
-   "V" stitches (same V shape and 22:28 stitch rhythm), a stitched dashed
-   seam, and soft yarn shading. As in Word Shuffle, the yarn follows the
-   color theme - every theme has its own yarn color - but it is a deeper,
-   more saturated shade than the theme's background, so the knitting
-   always pops out of it.
-   --knit  = the yarn color of the stitches
-   --knit-back = the darker wool that shows between the stitches
+   Styled after the knitting on WORD SHUFFLE's round buttons and its
+   countdown timer: a twisted strand of yarn (diagonal yarn-color / white
+   stripes), a white dashed stitch line sewn along both edges of the band
+   (like the stitch ring on the buttons and the dashed timer border), a
+   bright white highlight on the top edge, and a solid darker edge with a
+   chunky drop shadow. The white is deliberately strong so the knitting
+   is easy to see.
+   The yarn color follows the color theme (set per theme below) and is a
+   deeper, more saturated shade than the theme background so it pops.
    ===================================================================== */
-:root                        { --knit:#F2B544; }   /* Dark      -> golden yarn      */
+:root                        { --knit:#F2A92B; }   /* Dark      -> golden yarn      */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) { --knit:#3B5BDB; }  /* Light (auto) -> royal blue */
 }
-:root[data-theme="dark"]     { --knit:#F2B544; }
+:root[data-theme="dark"]     { --knit:#F2A92B; }
 :root[data-theme="light"]    { --knit:#3B5BDB; }   /* Light     -> royal blue yarn  */
 :root[data-theme="cream"]    { --knit:#E0602F; }   /* Cream     -> terracotta wool  */
 :root[data-theme="sky"]      { --knit:#1F86C7; }   /* Sky Blue  -> denim-blue wool  */
@@ -1169,43 +1170,48 @@ html, body {
 :root[data-theme="honey"]    { --knit:#DC8F0F; }   /* Honey     -> amber wool       */
 
 .sudoku-grid {
-  --knit-w: clamp(18px, 5vw, 26px);                      /* thickness of the knitted band */
-  --st: calc(var(--knit-w) / 2);                          /* stitch width: 2 stitches across the band */
-  --knit-back: color-mix(in srgb, var(--knit) 38%, #000); /* dark wool between stitches */
-  --knit-hi:   color-mix(in srgb, var(--knit) 45%, #fff); /* highlight on the yarn */
+  --knit-w: clamp(20px, 5.6vw, 28px);                      /* thickness of the yarn band */
+  --knit-edge: color-mix(in srgb, var(--knit) 55%, #000);  /* darker solid edge of the yarn */
+  --knit-light: color-mix(in srgb, var(--knit) 30%, #fff); /* light yarn between the white stripes */
   position: relative;
-  padding: calc(var(--knit-w) + 4px);
-  background: var(--knit-back);
+  padding: calc(var(--knit-w) + 5px);
+  background: var(--knit-edge);
   border: none;
-  border-radius: 16px;
-  box-shadow: 0 0 0 2px var(--knit-back), 0 8px 18px rgba(0, 0, 0, 0.30);
+  border-radius: 18px;
+  /* solid dark edge + chunky drop shadow (like the buttons' hard bottom shadow) */
+  box-shadow: 0 0 0 2.5px var(--knit-edge), 0 5px 0 2.5px var(--knit-edge), 0 12px 18px rgba(0, 0, 0, 0.30);
   isolation: isolate;
 }
 @media (min-width: 900px) {
   .app-shell:fullscreen .sudoku-grid,
-  .app-shell:-webkit-full-screen .sudoku-grid { --knit-w: 30px; }
+  .app-shell:-webkit-full-screen .sudoku-grid { --knit-w: 34px; }
 }
 
-/* the stitches: Word Shuffle's "V" knit stitch, staggered in rows, in yarn color
-   with a lit left side, a shaded right side and a little shadow under each stitch */
+/* the twisted strand of yarn: diagonal stripes of yarn color and white,
+   rounded like a rolled strand (light on top, shade underneath) */
 .sudoku-grid::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: 0; pointer-events: none;
+  content: ""; position: absolute; inset: 3px; border-radius: 15px; z-index: 0; pointer-events: none;
   background:
-    linear-gradient(90deg,
-      rgba(0,0,0,.22) 0%, rgba(255,255,255,.34) 26%, rgba(255,255,255,.06) 52%,
-      rgba(0,0,0,.20) 100%) 0 0 / var(--st) calc(var(--st) * 1.2727),
-    var(--knit);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='28' viewBox='0 0 22 28'%3E%3Cg fill='none' stroke='%23000' stroke-width='4.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 3 L11 14 L18.4 3'/%3E%3Cpath d='M3.6 17 L11 28 L18.4 17'/%3E%3C/g%3E%3C/svg%3E") 0 0 / var(--st) calc(var(--st) * 1.2727) repeat;
-          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='28' viewBox='0 0 22 28'%3E%3Cg fill='none' stroke='%23000' stroke-width='4.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 3 L11 14 L18.4 3'/%3E%3Cpath d='M3.6 17 L11 28 L18.4 17'/%3E%3C/g%3E%3C/svg%3E") 0 0 / var(--st) calc(var(--st) * 1.2727) repeat;
+    /* roundness of the strand: bright top, shaded bottom */
+    linear-gradient(180deg, rgba(255,255,255,.38) 0%, rgba(255,255,255,0) 40%, rgba(0,0,0,.20) 100%),
+    /* the twist */
+    repeating-linear-gradient(-45deg,
+      var(--knit) 0 calc(var(--knit-w) * .36),
+      #ffffff     calc(var(--knit-w) * .36) calc(var(--knit-w) * .72));
+  box-shadow: inset 0 3px 0 rgba(255,255,255,.85), inset 0 -3px 0 rgba(0,0,0,.18);
+  /* the dashed stitch line sewn through the middle of the yarn band (shows on
+     both the yarn-color and the white stripes) */
+  outline: 3px dashed var(--knit-edge);
+  outline-offset: calc(-1 * (var(--knit-w) / 2 + 1px));
 }
 
-/* the inner panel the numbers sit on (its color is the thin cell-divider
-   color) with a stitched dashed seam, like Word Shuffle's stitched edges */
+/* the inner panel the numbers sit on (its color is the thin cell-divider color),
+   edged with a bold white seam line + dark outline, so the white pops */
 .sudoku-grid::after {
-  content: ""; position: absolute; inset: var(--knit-w); border-radius: 9px; z-index: 1; pointer-events: none;
+  content: ""; position: absolute; inset: var(--knit-w); border-radius: 10px; z-index: 1; pointer-events: none;
   background: var(--border);
-  border: 2px dashed var(--knit-hi);
-  box-shadow: 0 0 0 2px var(--knit-back), inset 0 2px 6px rgba(0, 0, 0, 0.14);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2.5px var(--knit-edge), 0 0 0 5px rgba(255,255,255,.55), inset 0 2px 6px rgba(0, 0, 0, 0.16);
 }
 
 /* cells and labels sit above the panel */

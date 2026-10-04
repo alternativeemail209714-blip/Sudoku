@@ -1,17 +1,20 @@
-# v3.5.0 — knitted board frame, Word Shuffle style
+# v3.6.0 — knitted board frame, Word Shuffle button / timer style
 
-The outermost edge of the big board (the border enclosing all the numbers) is
-now a knitted band in the style of the WORD SHUFFLE game: rows of "V" stitches,
-yarn shading and a stitched dashed seam.
+The outermost edge of the big board (the border enclosing all the numbers) now
+copies the knitting on Word Shuffle's round buttons and countdown timer:
 
-- The yarn color follows the color theme (golden on Dark, royal blue on Light,
-  terracotta on Cream, denim blue on Sky Blue, moss green on Meadow, rose on
-  Blossom, violet on Lavender, amber on Honey) and changes automatically when
-  you change theme - but it is a deeper, more saturated shade than the theme's
-  background, so the knitting always pops out of it.
-- Only the knit frame was taken from Word Shuffle. CSS only: no changes to
-  game.js, index.html or the server.
-- The 3x3 box dividers inside the board still use the theme color.
+- a twisted strand of yarn (diagonal yarn-color and white stripes) with a
+  rounded look,
+- a dashed stitch line sewn through the middle of the yarn band, a bold white
+  seam along the inner edge, a white highlight on the top edge and a solid
+  darker edge with a chunky shadow,
+- much more white than before, so the knitting is obvious at a glance.
+
+The yarn color still follows the color theme (golden on Dark, royal blue on
+Light, terracotta on Cream, denim blue on Sky Blue, moss green on Meadow, rose
+on Blossom, violet on Lavender, amber on Honey) and is deeper than the theme
+background so it pops. CSS only: no changes to game.js, index.html or the
+server. The 3x3 box dividers still use the theme color.
 
 ---
 
